@@ -163,6 +163,7 @@ function openAt(targetPath) {
       products: SEED_PRODUCTS,
       sales: [],
       stockLogs: [],
+      categories: ['饮料', '零食', '日用品', '生鲜', '粮油', '其他'],
     })
   } else {
     persistFile()
@@ -287,7 +288,25 @@ export function loadState() {
     'SELECT * FROM stock_logs ORDER BY created_at DESC',
   ).map(mapLog)
 
-  return { products, sales, stockLogs }
+  const catRow = get(`SELECT value FROM meta WHERE key = 'categories'`)
+  let categories = ['饮料', '零食', '日用品', '生鲜', '粮油', '其他']
+  if (catRow?.value) {
+    try {
+      const parsed = JSON.parse(String(catRow.value))
+      if (Array.isArray(parsed) && parsed.length) categories = parsed
+    } catch {
+      /* ignore */
+    }
+  }
+  // 合并商品里已有分类
+  for (const p of products) {
+    if (p.category && !categories.includes(p.category)) {
+      categories.push(p.category)
+    }
+  }
+  if (!categories.includes('其他')) categories.push('其他')
+
+  return { products, sales, stockLogs, categories }
 }
 
 export function saveState(state) {
@@ -368,6 +387,15 @@ export function saveState(state) {
       `INSERT INTO meta (key, value) VALUES ('updated_at', ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       [new Date().toISOString()],
+    )
+
+    const categories = Array.isArray(state.categories)
+      ? state.categories
+      : ['饮料', '零食', '日用品', '生鲜', '粮油', '其他']
+    run(
+      `INSERT INTO meta (key, value) VALUES ('categories', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [JSON.stringify(categories)],
     )
 
     exec('COMMIT')

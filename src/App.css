@@ -880,17 +880,53 @@
   font-size: 0.85rem;
 }
 
-.price-flash {
-  margin-top: 0.55rem;
-  padding: 0.85rem 1rem;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #1b5e4a, #2a7a60);
-  color: #f4faf7;
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 650;
-  animation: fadeUp 0.25s ease;
+.cat-add-row {
+  display: flex;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
 }
+
+.cat-add-row input {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem 0.85rem;
+}
+
+.cat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.cat-list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f7faf8;
+}
+
+.cat-list input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.45rem 0.65rem;
+  background: #fff;
+}
+
+.cat-list input:disabled {
+  opacity: 0.7;
+  background: #eef3f0;
+}
+
 
 .pack-hint {
   display: flex;

@@ -14,7 +14,7 @@ import type {
   Sale,
   StockLog,
 } from '../types'
-import { normalizeProduct } from '../types'
+import { DEFAULT_CATEGORIES, normalizeCategories, normalizeProduct } from '../types'
 import { normalizeScanCode } from '../utils/scanCode'
 
 const STORAGE_KEY = 'xianlin-supermarket-v1'
@@ -52,32 +52,51 @@ function isDesktop() {
   return typeof window !== 'undefined' && !!window.desktopLedger
 }
 
+function emptyState(): AppState {
+  return {
+    products: SEED_PRODUCTS,
+    sales: [],
+    stockLogs: [],
+    categories: [...DEFAULT_CATEGORIES],
+  }
+}
+
 function loadLocalState(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as AppState
       if (parsed.products?.length) {
-        return {
-          ...parsed,
-          products: parsed.products.map((p) => normalizeProduct(p)),
-        }
+        return normalizeState(parsed)
       }
     }
   } catch {
     /* ignore */
   }
-  return { products: SEED_PRODUCTS, sales: [], stockLogs: [] }
+  return emptyState()
 }
 
 function normalizeState(appState: AppState): AppState {
+  const products = (appState.products || []).map((p) => normalizeProduct(p))
+  const fromProducts = products.map((p) => p.category).filter(Boolean)
+  const categories = normalizeCategories([
+    ...(appState.categories || []),
+    ...fromProducts,
+  ])
   return {
-    ...appState,
-    products: (appState.products || []).map((p) => normalizeProduct(p)),
+    products,
+    sales: appState.sales || [],
+    stockLogs: appState.stockLogs || [],
+    categories,
   }
 }
 
-let state: AppState = { products: [], sales: [], stockLogs: [] }
+let state: AppState = {
+  products: [],
+  sales: [],
+  stockLogs: [],
+  categories: [],
+}
 let ready = false
 let dbPath = ''
 let dbDefaultPath = ''
@@ -313,6 +332,7 @@ export function useAppStore() {
         })
 
         return {
+          ...s,
           products,
           sales: [sale, ...s.sales],
           stockLogs: [...logs, ...s.stockLogs],
@@ -325,9 +345,60 @@ export function useAppStore() {
   )
 
   const resetData = useCallback(() => {
-    setState({ products: SEED_PRODUCTS, sales: [], stockLogs: [] })
+    setState(emptyState())
   }, [])
 
+  const addCategory = useCallback((name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return false
+    let ok = false
+    setState((s) => {
+      if (s.categories.includes(trimmed)) return s
+      ok = true
+      return { ...s, categories: [...s.categories, trimmed] }
+    })
+    return ok
+  }, [])
+
+  const renameCategory = useCallback((from: string, to: string) => {
+    const next = to.trim()
+    if (!from || !next || from === '其他') return false
+    let ok = false
+    setState((s) => {
+      if (!s.categories.includes(from)) return s
+      if (s.categories.includes(next) && next !== from) return s
+      ok = true
+      return {
+        ...s,
+        categories: s.categories.map((c) => (c === from ? next : c)),
+        products: s.products.map((p) =>
+          p.category === from
+            ? { ...p, category: next, updatedAt: now() }
+            : p,
+        ),
+      }
+    })
+    return ok
+  }, [])
+
+  const deleteCategory = useCallback((name: string) => {
+    if (!name || name === '其他') return false
+    let ok = false
+    setState((s) => {
+      if (!s.categories.includes(name)) return s
+      ok = true
+      return {
+        ...s,
+        categories: s.categories.filter((c) => c !== name),
+        products: s.products.map((p) =>
+          p.category === name
+            ? { ...p, category: '其他', updatedAt: now() }
+            : p,
+        ),
+      }
+    })
+    return ok
+  }, [])
   const revealDatabase = useCallback(async () => {
     if (window.desktopLedger) {
       return window.desktopLedger.reveal()
@@ -402,6 +473,9 @@ export function useAppStore() {
     adjustStock,
     checkout,
     resetData,
+    addCategory,
+    renameCategory,
+    deleteCategory,
     revealDatabase,
     chooseSaveDatabasePath,
     chooseOpenDatabasePath,

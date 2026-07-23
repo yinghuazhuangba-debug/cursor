@@ -1,10 +1,4 @@
-export type Category =
-  | '饮料'
-  | '零食'
-  | '日用品'
-  | '生鲜'
-  | '粮油'
-  | '其他'
+export type Category = string
 
 /** pack: unit=按最小单位(瓶), case=按箱 */
 export type PackType = 'unit' | 'case'
@@ -80,9 +74,11 @@ export interface AppState {
   products: Product[]
   sales: Sale[]
   stockLogs: StockLog[]
+  categories: string[]
 }
 
-export const CATEGORIES: Category[] = [
+/** 默认分类，可在商品管理中手动维护 */
+export const DEFAULT_CATEGORIES: string[] = [
   '饮料',
   '零食',
   '日用品',
@@ -90,6 +86,9 @@ export const CATEGORIES: Category[] = [
   '粮油',
   '其他',
 ]
+
+/** @deprecated 使用 DEFAULT_CATEGORIES / store.categories */
+export const CATEGORIES = DEFAULT_CATEGORIES
 
 export const PAYMENT_LABELS: Record<Sale['paymentMethod'], string> = {
   cash: '现金',
@@ -121,4 +120,14 @@ export function normalizeProduct(p: Partial<Product> & Pick<Product, 'id' | 'bar
     createdAt: p.createdAt || now,
     updatedAt: p.updatedAt || now,
   }
+}
+
+export function normalizeCategories(list?: string[] | null): string[] {
+  const base = Array.isArray(list) && list.length ? list : DEFAULT_CATEGORIES
+  const cleaned = base
+    .map((c) => String(c || '').trim())
+    .filter(Boolean)
+  const uniq = [...new Set(cleaned)]
+  if (!uniq.includes('其他')) uniq.push('其他')
+  return uniq
 }

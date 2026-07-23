@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { Category, Product } from '../types'
-import { CATEGORIES } from '../types'
 import { formatMoney, useAppStore } from '../store/useStore'
 import { normalizeScanCode } from '../utils/scanCode'
 
@@ -20,12 +19,24 @@ const emptyForm = {
 }
 
 export function Products() {
-  const { products, addProduct, updateProduct, deleteProduct } = useAppStore()
+  const {
+    products,
+    categories,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    addCategory,
+    renameCategory,
+    deleteCategory,
+  } = useAppStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<Category | '全部'>('全部')
   const [editing, setEditing] = useState<Product | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [showCats, setShowCats] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [newCat, setNewCat] = useState('')
+  const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({})
   const firstInputRef = useRef<HTMLInputElement>(null)
 
   const filtered = useMemo(() => {
@@ -48,9 +59,21 @@ export function Products() {
     return () => window.clearTimeout(t)
   }, [showForm])
 
+  useEffect(() => {
+    if (!showCats) return
+    const drafts: Record<string, string> = {}
+    for (const c of categories) drafts[c] = c
+    setRenameDrafts(drafts)
+  }, [showCats, categories])
+
   function openCreate() {
     setEditing(null)
-    setForm(emptyForm)
+    setForm({
+      ...emptyForm,
+      category: categories.includes('其他')
+        ? '其他'
+        : categories[0] || '其他',
+    })
     setShowForm(true)
   }
 
@@ -118,12 +141,19 @@ export function Products() {
           onChange={(e) => setCategory(e.target.value as Category | '全部')}
         >
           <option value="全部">全部分类</option>
-          {CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          className="btn ghost"
+          onClick={() => setShowCats(true)}
+        >
+          维护分类
+        </button>
         <button type="button" className="btn primary" onClick={openCreate}>
           新增商品
         </button>
@@ -270,7 +300,7 @@ export function Products() {
                       }))
                     }
                   >
-                    {CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <option key={c} value={c}>
                         {c}
                       </option>
@@ -378,6 +408,129 @@ export function Products() {
                 </button>
               </div>
             </form>
+          </div>,
+          document.body,
+        )}
+
+      {showCats &&
+        createPortal(
+          <div
+            className="modal-backdrop"
+            role="presentation"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setShowCats(false)
+            }}
+          >
+            <div
+              className="modal"
+              role="dialog"
+              aria-modal="true"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <h2>维护商品分类</h2>
+              <p className="muted" style={{ marginTop: 0 }}>
+                可新增、重命名、删除分类。「其他」为系统保留，不可删除。
+              </p>
+
+              <div className="cat-add-row">
+                <input
+                  type="text"
+                  placeholder="新分类名称，如：烟酒"
+                  value={newCat}
+                  onChange={(e) => setNewCat(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (addCategory(newCat)) {
+                        setNewCat('')
+                      } else {
+                        alert('分类为空或已存在')
+                      }
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => {
+                    if (addCategory(newCat)) setNewCat('')
+                    else alert('分类为空或已存在')
+                  }}
+                >
+                  添加
+                </button>
+              </div>
+
+              <ul className="cat-list">
+                {categories.map((c) => {
+                  const count = products.filter((p) => p.category === c).length
+                  return (
+                    <li key={c}>
+                      <input
+                        type="text"
+                        value={renameDrafts[c] ?? c}
+                        disabled={c === '其他'}
+                        onChange={(e) =>
+                          setRenameDrafts((d) => ({
+                            ...d,
+                            [c]: e.target.value,
+                          }))
+                        }
+                      />
+                      <span className="muted">{count} 件商品</span>
+                      <div className="actions">
+                        {c !== '其他' && (
+                          <button
+                            type="button"
+                            className="link"
+                            onClick={() => {
+                              const next = (renameDrafts[c] ?? c).trim()
+                              if (next === c) return
+                              if (!renameCategory(c, next)) {
+                                alert('重命名失败：名称无效或已存在')
+                                return
+                              }
+                              if (category === c) setCategory(next)
+                            }}
+                          >
+                            保存改名
+                          </button>
+                        )}
+                        {c !== '其他' && (
+                          <button
+                            type="button"
+                            className="link danger"
+                            onClick={() => {
+                              if (
+                                !confirm(
+                                  `删除分类「${c}」？该分类下商品将归入「其他」。`,
+                                )
+                              ) {
+                                return
+                              }
+                              deleteCategory(c)
+                              if (category === c) setCategory('全部')
+                            }}
+                          >
+                            删除
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => setShowCats(false)}
+                >
+                  完成
+                </button>
+              </div>
+            </div>
           </div>,
           document.body,
         )}
