@@ -146,6 +146,22 @@ function ensureSchema() {
   if (!cols.includes('case_price')) {
     exec(`ALTER TABLE products ADD COLUMN case_price REAL NOT NULL DEFAULT 0`)
   }
+
+  const saleItemCols = all(`PRAGMA table_info(sale_items)`).map((c) => c.name)
+  if (!saleItemCols.includes('unit_cost')) {
+    exec(`ALTER TABLE sale_items ADD COLUMN unit_cost REAL NOT NULL DEFAULT 0`)
+  }
+  if (!saleItemCols.includes('cost_subtotal')) {
+    exec(
+      `ALTER TABLE sale_items ADD COLUMN cost_subtotal REAL NOT NULL DEFAULT 0`,
+    )
+  }
+  if (!saleItemCols.includes('stock_qty')) {
+    exec(`ALTER TABLE sale_items ADD COLUMN stock_qty INTEGER`)
+  }
+  if (!saleItemCols.includes('pack')) {
+    exec(`ALTER TABLE sale_items ADD COLUMN pack TEXT`)
+  }
 }
 
 function openAt(targetPath) {
@@ -276,6 +292,10 @@ export function loadState() {
       price: item.price,
       quantity: item.quantity,
       subtotal: item.subtotal,
+      stockQty: item.stock_qty ?? item.quantity,
+      pack: item.pack || undefined,
+      unitCost: Number(item.unit_cost) || 0,
+      costSubtotal: Number(item.cost_subtotal) || 0,
     })),
     total: row.total,
     paid: row.paid,
@@ -350,8 +370,10 @@ export function saveState(state) {
       )
       for (const item of s.items) {
         run(
-          `INSERT INTO sale_items (sale_id, product_id, name, price, quantity, subtotal)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO sale_items (
+            sale_id, product_id, name, price, quantity, subtotal,
+            unit_cost, cost_subtotal, stock_qty, pack
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             s.id,
             item.productId,
@@ -359,6 +381,10 @@ export function saveState(state) {
             item.price,
             item.quantity,
             item.subtotal,
+            Number(item.unitCost) || 0,
+            Number(item.costSubtotal) || 0,
+            item.stockQty ?? item.quantity,
+            item.pack || null,
           ],
         )
       }

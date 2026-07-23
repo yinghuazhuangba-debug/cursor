@@ -282,6 +282,8 @@ export function useAppStore() {
         const saleItems = items.map((item) => {
           const stockQty = item.stockQty ?? item.quantity
           const idx = products.findIndex((p) => p.id === item.productId)
+          const unitCost =
+            idx >= 0 ? Number(products[idx].cost) || 0 : 0
           if (idx >= 0) {
             products[idx] = {
               ...products[idx],
@@ -297,6 +299,8 @@ export function useAppStore() {
             subtotal: +(item.price * item.quantity).toFixed(2),
             stockQty,
             pack: item.pack,
+            unitCost,
+            costSubtotal: +(unitCost * stockQty).toFixed(2),
           }
         })
 

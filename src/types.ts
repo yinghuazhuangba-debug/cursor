@@ -46,6 +46,10 @@ export interface SaleItem {
   subtotal: number
   stockQty?: number
   pack?: PackType
+  /** 成交时最小单位进价快照 */
+  unitCost?: number
+  /** 成本小计 = unitCost × stockQty */
+  costSubtotal?: number
 }
 
 export interface Sale {

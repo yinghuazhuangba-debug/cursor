@@ -6,6 +6,7 @@ export type PageId =
   | 'products'
   | 'inventory'
   | 'sales'
+  | 'reports'
 
 const NAV: { id: PageId; label: string; icon: string }[] = [
   { id: 'dashboard', label: '经营概览', icon: '◈' },
@@ -13,6 +14,7 @@ const NAV: { id: PageId; label: string; icon: string }[] = [
   { id: 'products', label: '商品管理', icon: '▤' },
   { id: 'inventory', label: '库存管理', icon: '▦' },
   { id: 'sales', label: '销售记录', icon: '▥' },
+  { id: 'reports', label: '经营报表', icon: '◉' },
 ]
 
 interface LayoutProps {

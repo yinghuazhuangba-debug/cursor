@@ -5,6 +5,7 @@ import { Inventory } from './pages/Inventory'
 import { POS } from './pages/POS'
 import { Products } from './pages/Products'
 import { Sales } from './pages/Sales'
+import { Reports } from './pages/Reports'
 import { useAppStore } from './store/useStore'
 import './App.css'
 
@@ -35,6 +36,7 @@ function App() {
       {page === 'products' && <Products />}
       {page === 'inventory' && <Inventory />}
       {page === 'sales' && <Sales />}
+      {page === 'reports' && <Reports />}
 
       {page === 'dashboard' && (
         <div className="danger-zone">
