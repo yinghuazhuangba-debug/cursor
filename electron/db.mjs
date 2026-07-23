@@ -4,19 +4,37 @@ import { createRequire } from 'node:module'
 import { app } from 'electron'
 import initSqlJs from 'sql.js'
 import { SEED_PRODUCTS } from './seed.mjs'
+import {
+  getConfiguredDbPath,
+  getDefaultDbPath,
+  writeSettings,
+} from './config.mjs'
 
 const require = createRequire(import.meta.url)
 
 /** @type {import('sql.js').Database | null} */
 let db = null
 let dbPath = ''
+/** @type {Awaited<ReturnType<typeof initSqlJs>> | null} */
+let SQL = null
 
 export function getDbPath() {
   return dbPath
 }
 
+export function getDbInfo() {
+  const current = dbPath || getConfiguredDbPath()
+  const defaultPath = getDefaultDbPath()
+  return {
+    path: current,
+    defaultPath,
+    isCustom: path.resolve(current) !== path.resolve(defaultPath),
+  }
+}
+
 function persistFile() {
   if (!db || !dbPath) return
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true })
   const data = db.export()
   fs.writeFileSync(dbPath, Buffer.from(data))
 }
@@ -50,24 +68,18 @@ function run(sql, params = []) {
   db.run(sql, params)
 }
 
-export async function initDatabase() {
-  const dir = app.getPath('userData')
-  fs.mkdirSync(dir, { recursive: true })
-  dbPath = path.join(dir, 'ledger.db')
-
+async function ensureSql() {
+  if (SQL) return SQL
   const wasmPath = path.join(
     path.dirname(require.resolve('sql.js')),
     'sql-wasm.wasm',
   )
   const wasmBinary = fs.readFileSync(wasmPath)
-  const SQL = await initSqlJs({ wasmBinary })
+  SQL = await initSqlJs({ wasmBinary })
+  return SQL
+}
 
-  if (fs.existsSync(dbPath)) {
-    db = new SQL.Database(fs.readFileSync(dbPath))
-  } else {
-    db = new SQL.Database()
-  }
-
+function ensureSchema() {
   exec(`
     CREATE TABLE IF NOT EXISTS meta (
       key TEXT PRIMARY KEY,
@@ -119,7 +131,17 @@ export async function initDatabase() {
       created_at TEXT NOT NULL
     );
   `)
+}
 
+function openAt(targetPath) {
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true })
+  dbPath = targetPath
+  if (fs.existsSync(targetPath)) {
+    db = new SQL.Database(fs.readFileSync(targetPath))
+  } else {
+    db = new SQL.Database()
+  }
+  ensureSchema()
   const row = get('SELECT COUNT(*) AS n FROM products')
   if (!row || Number(row.n) === 0) {
     saveState({
@@ -130,8 +152,62 @@ export async function initDatabase() {
   } else {
     persistFile()
   }
+}
 
+export async function initDatabase() {
+  await ensureSql()
+  // touch userData so settings can live there
+  fs.mkdirSync(app.getPath('userData'), { recursive: true })
+  openAt(getConfiguredDbPath())
   return dbPath
+}
+
+/**
+ * Switch database file.
+ * @param {string} nextPath
+ * @param {{ mode: 'copy' | 'open' | 'fresh' }} options
+ */
+export async function switchDatabase(nextPath, options = { mode: 'copy' }) {
+  await ensureSql()
+  const resolved = path.resolve(nextPath)
+  if (!resolved.toLowerCase().endsWith('.db')) {
+    throw new Error('数据库文件需以 .db 结尾')
+  }
+
+  // Flush current memory first
+  if (db) persistFile()
+
+  const previous = dbPath
+  const mode = options.mode || 'copy'
+
+  if (mode === 'copy' && previous && fs.existsSync(previous)) {
+    fs.mkdirSync(path.dirname(resolved), { recursive: true })
+    if (path.resolve(previous) !== resolved) {
+      fs.copyFileSync(previous, resolved)
+    }
+  }
+
+  if (db) {
+    db.close()
+    db = null
+  }
+
+  if (mode === 'fresh' && fs.existsSync(resolved)) {
+    fs.unlinkSync(resolved)
+  }
+
+  if (path.resolve(resolved) === path.resolve(getDefaultDbPath())) {
+    writeSettings({ dbPath: null })
+  } else {
+    writeSettings({ dbPath: resolved })
+  }
+
+  openAt(resolved)
+  return getDbInfo()
+}
+
+export async function resetDatabasePath() {
+  return switchDatabase(getDefaultDbPath(), { mode: 'open' })
 }
 
 function mapProduct(row) {

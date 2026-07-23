@@ -883,7 +883,7 @@
 .db-banner {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
   padding: 0.95rem 1.15rem;
   border-radius: var(--radius);
@@ -901,6 +901,24 @@
   margin: 0;
   word-break: break-all;
   font-size: 0.78rem;
+}
+
+.db-default-hint,
+.db-feedback {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+}
+
+.db-feedback {
+  color: var(--brand-mid);
+}
+
+.db-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+  max-width: 360px;
 }
 
 .db-banner .btn.ghost {

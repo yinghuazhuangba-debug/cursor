@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useAppStore, useTodayStats, formatMoney } from '../store/useStore'
 
 interface DashboardProps {
@@ -12,9 +13,16 @@ export function Dashboard({ onGoPos, onGoInventory }: DashboardProps) {
     lowStockProducts,
     isDesktop,
     dbPath,
+    dbDefaultPath,
+    dbIsCustom,
     revealDatabase,
+    chooseSaveDatabasePath,
+    chooseOpenDatabasePath,
+    resetDatabasePath,
   } = useAppStore()
   const { revenue, count, itemsSold, todaySales } = useTodayStats(sales)
+  const [dbBusy, setDbBusy] = useState(false)
+  const [dbMessage, setDbMessage] = useState<string | null>(null)
 
   const totalStockValue = products.reduce(
     (sum, p) => sum + p.cost * p.stock,
@@ -34,6 +42,22 @@ export function Dashboard({ onGoPos, onGoInventory }: DashboardProps) {
     wechat: '微信',
     alipay: '支付宝',
     card: '银行卡',
+  }
+
+  async function runDbAction(
+    action: () => Promise<unknown>,
+    okText: string,
+  ) {
+    setDbBusy(true)
+    setDbMessage(null)
+    try {
+      const result = await action()
+      if (result) setDbMessage(okText)
+    } catch (err) {
+      setDbMessage(err instanceof Error ? err.message : '操作失败')
+    } finally {
+      setDbBusy(false)
+    }
   }
 
   return (
@@ -57,16 +81,61 @@ export function Dashboard({ onGoPos, onGoInventory }: DashboardProps) {
       {isDesktop && dbPath && (
         <section className="db-banner">
           <div>
-            <strong>本地数据库</strong>
+            <strong>本地数据库 {dbIsCustom ? '（自定义）' : '（默认）'}</strong>
             <p className="mono muted">{dbPath}</p>
+            {dbIsCustom && (
+              <p className="muted db-default-hint">默认位置：{dbDefaultPath}</p>
+            )}
+            {dbMessage && <p className="db-feedback">{dbMessage}</p>}
           </div>
-          <button
-            type="button"
-            className="btn ghost"
-            onClick={() => void revealDatabase()}
-          >
-            打开所在文件夹
-          </button>
+          <div className="db-actions">
+            <button
+              type="button"
+              className="btn ghost"
+              disabled={dbBusy}
+              onClick={() => void revealDatabase()}
+            >
+              打开文件夹
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              disabled={dbBusy}
+              onClick={() =>
+                void runDbAction(
+                  chooseSaveDatabasePath,
+                  '已切换到新位置（已复制当前数据）',
+                )
+              }
+            >
+              另存到…
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              disabled={dbBusy}
+              onClick={() =>
+                void runDbAction(
+                  chooseOpenDatabasePath,
+                  '已切换到所选数据库',
+                )
+              }
+            >
+              打开已有…
+            </button>
+            {dbIsCustom && (
+              <button
+                type="button"
+                className="btn ghost"
+                disabled={dbBusy}
+                onClick={() =>
+                  void runDbAction(resetDatabasePath, '已恢复默认位置')
+                }
+              >
+                恢复默认
+              </button>
+            )}
+          </div>
         </section>
       )}
 

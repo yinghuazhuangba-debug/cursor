@@ -1,12 +1,16 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { getDefaultDbPath } from './config.mjs'
 import {
   closeDatabase,
+  getDbInfo,
   getDbPath,
   initDatabase,
   loadState,
+  resetDatabasePath,
   saveState,
+  switchDatabase,
 } from './db.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -50,6 +54,7 @@ function createWindow() {
 
 function registerIpc() {
   ipcMain.handle('ledger:getPath', () => getDbPath())
+  ipcMain.handle('ledger:getInfo', () => getDbInfo())
   ipcMain.handle('ledger:load', () => loadState())
   ipcMain.handle('ledger:save', (_event, state) => {
     saveState(state)
@@ -59,6 +64,34 @@ function registerIpc() {
     const file = getDbPath()
     if (file) shell.showItemInFolder(file)
     return file
+  })
+
+  ipcMain.handle('ledger:chooseSavePath', async () => {
+    const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
+      title: '选择 ledger.db 保存位置',
+      defaultPath: getDbPath() || getDefaultDbPath(),
+      filters: [{ name: 'SQLite 数据库', extensions: ['db'] }],
+    })
+    if (result.canceled || !result.filePath) return null
+    const info = await switchDatabase(result.filePath, { mode: 'copy' })
+    return { info, state: loadState() }
+  })
+
+  ipcMain.handle('ledger:chooseOpenPath', async () => {
+    const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+      title: '打开已有 ledger.db',
+      defaultPath: path.dirname(getDbPath() || getDefaultDbPath()),
+      properties: ['openFile'],
+      filters: [{ name: 'SQLite 数据库', extensions: ['db'] }],
+    })
+    if (result.canceled || !result.filePaths?.[0]) return null
+    const info = await switchDatabase(result.filePaths[0], { mode: 'open' })
+    return { info, state: loadState() }
+  })
+
+  ipcMain.handle('ledger:resetPath', async () => {
+    const info = await resetDatabasePath()
+    return { info, state: loadState() }
   })
 }
 

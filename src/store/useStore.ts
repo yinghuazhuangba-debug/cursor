@@ -21,9 +21,26 @@ declare global {
     desktopLedger?: {
       isDesktop: true
       getPath: () => Promise<string>
+      getInfo: () => Promise<{
+        path: string
+        defaultPath: string
+        isCustom: boolean
+      }>
       load: () => Promise<AppState>
       save: (state: AppState) => Promise<boolean>
       reveal: () => Promise<string>
+      chooseSavePath: () => Promise<{
+        info: { path: string; defaultPath: string; isCustom: boolean }
+        state: AppState
+      } | null>
+      chooseOpenPath: () => Promise<{
+        info: { path: string; defaultPath: string; isCustom: boolean }
+        state: AppState
+      } | null>
+      resetPath: () => Promise<{
+        info: { path: string; defaultPath: string; isCustom: boolean }
+        state: AppState
+      }>
     }
   }
 }
@@ -48,6 +65,8 @@ function loadLocalState(): AppState {
 let state: AppState = { products: [], sales: [], stockLogs: [] }
 let ready = false
 let dbPath = ''
+let dbDefaultPath = ''
+let dbIsCustom = false
 const listeners = new Set<() => void>()
 
 function emit() {
@@ -93,11 +112,16 @@ export function bootStore() {
   if (bootPromise) return bootPromise
   bootPromise = (async () => {
     if (isDesktop() && window.desktopLedger) {
-      dbPath = await window.desktopLedger.getPath()
+      const info = await window.desktopLedger.getInfo()
+      dbPath = info.path
+      dbDefaultPath = info.defaultPath
+      dbIsCustom = info.isCustom
       state = await window.desktopLedger.load()
     } else {
       state = loadLocalState()
       dbPath = ''
+      dbDefaultPath = ''
+      dbIsCustom = false
     }
     ready = true
     emit()
@@ -109,14 +133,34 @@ export function useAppStore() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   const [hydrated, setHydrated] = useState(ready)
   const [path, setPath] = useState(dbPath)
+  const [defaultPath, setDefaultPath] = useState(dbDefaultPath)
+  const [isCustom, setIsCustom] = useState(dbIsCustom)
 
   useEffect(() => {
     void bootStore().then(() => {
       setHydrated(true)
       setPath(dbPath)
+      setDefaultPath(dbDefaultPath)
+      setIsCustom(dbIsCustom)
     })
   }, [])
 
+  const applyDbSwitch = useCallback(
+    (result: {
+      info: { path: string; defaultPath: string; isCustom: boolean }
+      state: AppState
+    }) => {
+      dbPath = result.info.path
+      dbDefaultPath = result.info.defaultPath
+      dbIsCustom = result.info.isCustom
+      state = result.state
+      setPath(dbPath)
+      setDefaultPath(dbDefaultPath)
+      setIsCustom(dbIsCustom)
+      emit()
+    },
+    [],
+  )
   const addProduct = useCallback(
     (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
       const product: Product = {
@@ -270,6 +314,27 @@ export function useAppStore() {
     return ''
   }, [])
 
+  const chooseSaveDatabasePath = useCallback(async () => {
+    if (!window.desktopLedger) return null
+    const result = await window.desktopLedger.chooseSavePath()
+    if (result) applyDbSwitch(result)
+    return result
+  }, [applyDbSwitch])
+
+  const chooseOpenDatabasePath = useCallback(async () => {
+    if (!window.desktopLedger) return null
+    const result = await window.desktopLedger.chooseOpenPath()
+    if (result) applyDbSwitch(result)
+    return result
+  }, [applyDbSwitch])
+
+  const resetDatabasePath = useCallback(async () => {
+    if (!window.desktopLedger) return null
+    const result = await window.desktopLedger.resetPath()
+    applyDbSwitch(result)
+    return result
+  }, [applyDbSwitch])
+
   const findByBarcode = useCallback(
     (barcode: string) =>
       snapshot.products.find((p) => p.barcode === barcode.trim()),
@@ -285,6 +350,8 @@ export function useAppStore() {
     ...snapshot,
     hydrated,
     dbPath: path,
+    dbDefaultPath: defaultPath,
+    dbIsCustom: isCustom,
     isDesktop: isDesktop(),
     addProduct,
     updateProduct,
@@ -293,6 +360,9 @@ export function useAppStore() {
     checkout,
     resetData,
     revealDatabase,
+    chooseSaveDatabasePath,
+    chooseOpenDatabasePath,
+    resetDatabasePath,
     findByBarcode,
     lowStockProducts,
   }
