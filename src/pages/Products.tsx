@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { Category, Product } from '../types'
 import { formatMoney, useAppStore } from '../store/useStore'
+import { fuzzyMatchProducts } from '../utils/fuzzy'
 import { normalizeScanCode } from '../utils/scanCode'
 
 const emptyForm = {
@@ -44,7 +45,13 @@ export function Products() {
   const [historyHint, setHistoryHint] = useState<string | null>(null)
   /** 条码带出的历史商品快照（用于未改价时回填） */
   const [historyProduct, setHistoryProduct] = useState<Product | null>(null)
+  const [nameSuggestOpen, setNameSuggestOpen] = useState(false)
   const firstInputRef = useRef<HTMLInputElement>(null)
+
+  const nameSuggestions = useMemo(
+    () => fuzzyMatchProducts(products, form.name, 8),
+    [products, form.name],
+  )
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -130,6 +137,23 @@ export function Products() {
     setCostDirty(false)
   }
 
+  function fillFromHistory(hit: Product, source: '码' | '名称') {
+    setEditing(hit)
+    setHistoryProduct(hit)
+    setPriceDirty(false)
+    setCasePriceDirty(false)
+    setCostDirty(false)
+    setForm(productToForm(hit))
+    setNameSuggestOpen(false)
+    setHistoryHint(
+      `已按${source}匹配历史商品「${hit.name}」，已带出瓶码 ${hit.barcode}${
+        hit.caseBarcode ? `、箱码 ${hit.caseBarcode}` : ''
+      }，历史瓶价 ${formatMoney(hit.price)}${
+        hit.casePrice > 0 ? ` / 箱价 ${formatMoney(hit.casePrice)}` : ''
+      }。可修改；不改则按历史价保存。`,
+    )
+  }
+
   /** 扫/输入瓶码或箱码后，按历史商品自动带出资料与单价 */
   function applyHistoryByCode(raw: string) {
     const code = normalizeScanCode(raw) || raw.trim()
@@ -140,11 +164,15 @@ export function Products() {
       const caseCode = p.caseBarcode
         ? normalizeScanCode(p.caseBarcode) || p.caseBarcode.trim()
         : ''
-      return unit === code || caseCode === code || p.barcode === code || p.caseBarcode === code
+      return (
+        unit === code ||
+        caseCode === code ||
+        p.barcode === code ||
+        p.caseBarcode === code
+      )
     })
 
     if (!hit) {
-      // 新码：不覆盖用户已填内容，仅清除历史绑定
       if (historyProduct && !editing) {
         setHistoryProduct(null)
         setHistoryHint(null)
@@ -152,22 +180,11 @@ export function Products() {
       return
     }
 
-    // 已是当前编辑对象且条码未变，不重复覆盖（避免打字时冲掉用户修改）
     if (editing?.id === hit.id && historyProduct?.id === hit.id) {
       return
     }
 
-    setEditing(hit)
-    setHistoryProduct(hit)
-    setPriceDirty(false)
-    setCasePriceDirty(false)
-    setCostDirty(false)
-    setForm(productToForm(hit))
-    setHistoryHint(
-      `已识别历史商品「${hit.name}」，已带出历史单价（瓶价 ${formatMoney(hit.price)}${
-        hit.casePrice > 0 ? ` / 箱价 ${formatMoney(hit.casePrice)}` : ''
-      }）。可修改；不改则按历史价保存。`,
-    )
+    fillFromHistory(hit, '码')
   }
 
   function handleSubmit(e: FormEvent) {
@@ -393,17 +410,44 @@ export function Products() {
                     }}
                   />
                 </label>
-                <label>
+                <label className="name-suggest-field">
                   名称
                   <input
                     type="text"
                     autoComplete="off"
                     required
+                    placeholder="输入名称模糊查询，选中后带出瓶码/箱码"
                     value={form.name}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setForm((f) => ({ ...f, name: e.target.value }))
-                    }
+                      setNameSuggestOpen(true)
+                    }}
+                    onFocus={() => setNameSuggestOpen(true)}
+                    onBlur={() => {
+                      window.setTimeout(() => setNameSuggestOpen(false), 150)
+                    }}
                   />
+                  {nameSuggestOpen && nameSuggestions.length > 0 && (
+                    <ul className="name-suggest-list">
+                      {nameSuggestions.map((p) => (
+                        <li key={p.id}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => fillFromHistory(p, '名称')}
+                          >
+                            <strong>{p.name}</strong>
+                            <small>
+                              瓶码 {p.barcode}
+                              {p.caseBarcode ? ` · 箱码 ${p.caseBarcode}` : ''}
+                              {' · '}
+                              {formatMoney(p.price)}/{p.unit}
+                            </small>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </label>
                 <label>
                   分类
@@ -529,7 +573,8 @@ export function Products() {
                 </label>
               </div>
               <p className="muted" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
-                扫/输入已有瓶码或箱码并回车，自动带出历史单价；不改价则按历史单价保存。
+                维护规则：瓶码=零售最小单位；箱码=外箱码且不可与瓶码相同；箱规=一箱几件。
+                可用名称模糊查询或扫码带出历史编码与单价。库存始终按最小单位（如瓶）计数。
               </p>
               <div className="modal-actions">
                 <button
