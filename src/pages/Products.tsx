@@ -58,6 +58,11 @@ export function Products() {
     return fuzzyMatchProducts(products, form.name, 8)
   }, [products, form.name, nameTyping])
 
+  const productsByName = useMemo(
+    () => [...products].sort((a, b) => a.name.localeCompare(b.name, 'zh')),
+    [products],
+  )
+
   const filtered = useMemo(() => {
     return products.filter((p) => {
       const matchCat = category === '全部' || p.category === category
@@ -120,6 +125,24 @@ export function Products() {
     setShowForm(true)
   }
 
+  function resetToCreateForm() {
+    setEditing(null)
+    setHistoryProduct(null)
+    setHistoryHint(null)
+    setPriceDirty(false)
+    setCasePriceDirty(false)
+    setCostDirty(false)
+    setNameTyping(false)
+    setNameSuggestOpen(false)
+    setRestockQty('0')
+    setForm({
+      ...emptyForm,
+      category: categories.includes('其他')
+        ? '其他'
+        : categories[0] || '其他',
+    })
+  }
+
   function openEdit(p: Product) {
     setEditing(p)
     setHistoryProduct(p)
@@ -162,7 +185,7 @@ export function Products() {
     setRestockQty('0')
     setForm(productToForm(hit))
     setHistoryHint(
-      `已按${source}匹配历史商品「${hit.name}」，已带出瓶码 ${hit.barcode}${
+      `已按${source}匹配历史商品「${hit.name}」，已带出编码 ${hit.barcode}${
         hit.caseBarcode ? `、箱码 ${hit.caseBarcode}` : ''
       }，历史瓶价 ${formatMoney(hit.price)}${
         hit.casePrice > 0 ? ` / 箱价 ${formatMoney(hit.casePrice)}` : ''
@@ -170,7 +193,7 @@ export function Products() {
     )
   }
 
-  /** 扫/输入瓶码或箱码后，按历史商品自动带出资料与单价 */
+  /** 扫/输入编码或箱码后，按历史商品自动带出资料与单价 */
   function applyHistoryByCode(raw: string) {
     const code = normalizeScanCode(raw) || raw.trim()
     if (!code) return
@@ -245,7 +268,7 @@ export function Products() {
       payload.caseBarcode &&
       payload.caseBarcode === payload.barcode
     ) {
-      alert('箱码不能与瓶码相同，否则无法区分按瓶/按箱出售')
+      alert('箱码不能与编码相同，否则无法区分按瓶/按箱出售')
       return
     }
 
@@ -287,7 +310,7 @@ export function Products() {
       <div className="toolbar">
         <input
           className="search"
-          placeholder="搜索名称 / 条码 / 分类"
+          placeholder="搜索名称 / 编码 / 分类"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -318,9 +341,9 @@ export function Products() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>瓶/零售码</th>
-              <th>箱码</th>
               <th>名称</th>
+              <th>编码</th>
+              <th>箱码</th>
               <th>箱规</th>
               <th>瓶价</th>
               <th>库存</th>
@@ -331,14 +354,14 @@ export function Products() {
           <tbody>
             {filtered.map((p) => (
               <tr key={p.id} className={p.stock <= p.minStock ? 'row-warn' : ''}>
-                <td className="mono">{p.barcode}</td>
-                <td className="mono">{p.caseBarcode || '—'}</td>
                 <td>
                   {p.name}
                   <div className="muted" style={{ fontSize: '0.78rem' }}>
                     {p.category}
                   </div>
                 </td>
+                <td className="mono">{p.barcode}</td>
+                <td className="mono">{p.caseBarcode || '—'}</td>
                 <td>
                   {p.unitsPerCase > 1
                     ? `${p.unitsPerCase}${p.unit}/箱`
@@ -412,14 +435,88 @@ export function Products() {
                 </div>
               )}
               <div className="form-grid">
-                <label>
-                  瓶码 / 零售码
+                <label className="form-span">
+                  从已有商品选择
+                  <select
+                    value={editing?.id ?? ''}
+                    onChange={(e) => {
+                      const id = e.target.value
+                      if (!id) {
+                        resetToCreateForm()
+                        return
+                      }
+                      const hit = products.find((p) => p.id === id)
+                      if (hit) fillFromHistory(hit, '名称')
+                    }}
+                  >
+                    <option value="">新建商品（不选已有）</option>
+                    {productsByName.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} · 编码 {p.barcode}
+                        {p.stock >= 0 ? ` · 库存 ${p.stock}${p.unit}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="field-hint">
+                    补货或改价：直接下拉选已有商品；新品：选「新建」后填名称与编码
+                  </small>
+                </label>
+                <label className="name-suggest-field form-span">
+                  商品名称
                   <input
                     ref={firstInputRef}
                     type="text"
                     autoComplete="off"
                     required
-                    placeholder="扫码后回车，自动带出历史单价"
+                    list="product-name-options"
+                    placeholder="输入新名称，或从上方下拉选择已有商品"
+                    value={form.name}
+                    onChange={(e) => {
+                      setNameTyping(true)
+                      setNameSuggestOpen(true)
+                      setForm((f) => ({ ...f, name: e.target.value }))
+                    }}
+                    onFocus={() => {
+                      if (nameTyping) setNameSuggestOpen(true)
+                    }}
+                    onBlur={() => {
+                      window.setTimeout(() => setNameSuggestOpen(false), 150)
+                    }}
+                  />
+                  <datalist id="product-name-options">
+                    {productsByName.map((p) => (
+                      <option key={p.id} value={p.name} />
+                    ))}
+                  </datalist>
+                  {nameSuggestOpen && nameSuggestions.length > 0 && (
+                    <ul className="name-suggest-list">
+                      {nameSuggestions.map((p) => (
+                        <li key={p.id}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => fillFromHistory(p, '名称')}
+                          >
+                            <strong>{p.name}</strong>
+                            <small>
+                              编码 {p.barcode}
+                              {p.caseBarcode ? ` · 箱码 ${p.caseBarcode}` : ''}
+                              {' · '}
+                              {formatMoney(p.price)}/{p.unit}
+                            </small>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </label>
+                <label>
+                  编码（自定，每种商品唯一）
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    required
+                    placeholder="如 NS550、水01，方便记忆"
                     value={form.barcode}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, barcode: e.target.value }))
@@ -455,48 +552,6 @@ export function Products() {
                       }
                     }}
                   />
-                </label>
-                <label className="name-suggest-field">
-                  名称
-                  <input
-                    type="text"
-                    autoComplete="off"
-                    required
-                    placeholder="输入名称模糊查询，选中后带出瓶码/箱码"
-                    value={form.name}
-                    onChange={(e) => {
-                      setNameTyping(true)
-                      setNameSuggestOpen(true)
-                      setForm((f) => ({ ...f, name: e.target.value }))
-                    }}
-                    onFocus={() => {
-                      if (nameTyping) setNameSuggestOpen(true)
-                    }}
-                    onBlur={() => {
-                      window.setTimeout(() => setNameSuggestOpen(false), 150)
-                    }}
-                  />
-                  {nameSuggestOpen && nameSuggestions.length > 0 && (
-                    <ul className="name-suggest-list">
-                      {nameSuggestions.map((p) => (
-                        <li key={p.id}>
-                          <button
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => fillFromHistory(p, '名称')}
-                          >
-                            <strong>{p.name}</strong>
-                            <small>
-                              瓶码 {p.barcode}
-                              {p.caseBarcode ? ` · 箱码 ${p.caseBarcode}` : ''}
-                              {' · '}
-                              {formatMoney(p.price)}/{p.unit}
-                            </small>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </label>
                 <label>
                   分类
@@ -655,8 +710,8 @@ export function Products() {
                 </label>
               </div>
               <p className="muted" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
-                维护规则：瓶码=零售最小单位；箱码=外箱码且不可与瓶码相同；箱规=一箱几件。
-                可用名称模糊查询或扫码带出历史编码与单价。库存始终按最小单位（如瓶）计数。
+                建议：名称与编码固定下来，编码可自定且每种商品唯一。补货请用上方下拉选已有商品，只填本次补货数量。
+                箱码可选；有箱码须填整箱售价。库存按最小单位计数。
               </p>
               </div>
               <div className="modal-actions">

@@ -1,7 +1,7 @@
 {
   "name": "xianlin-supermarket",
   "private": true,
-  "version": "1.7.2",
+  "version": "1.7.3",
   "description": "鲜邻超市销售管理系统",
   "author": "鲜邻超市",
   "type": "module",
