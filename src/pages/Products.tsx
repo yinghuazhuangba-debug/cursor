@@ -46,12 +46,14 @@ export function Products() {
   /** 条码带出的历史商品快照（用于未改价时回填） */
   const [historyProduct, setHistoryProduct] = useState<Product | null>(null)
   const [nameSuggestOpen, setNameSuggestOpen] = useState(false)
+  /** 仅用户手动改名称时才弹出模糊列表，避免带出历史后挡住保存按钮 */
+  const [nameTyping, setNameTyping] = useState(false)
   const firstInputRef = useRef<HTMLInputElement>(null)
 
-  const nameSuggestions = useMemo(
-    () => fuzzyMatchProducts(products, form.name, 8),
-    [products, form.name],
-  )
+  const nameSuggestions = useMemo(() => {
+    if (!nameTyping) return []
+    return fuzzyMatchProducts(products, form.name, 8)
+  }, [products, form.name, nameTyping])
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -103,6 +105,8 @@ export function Products() {
     setPriceDirty(false)
     setCasePriceDirty(false)
     setCostDirty(false)
+    setNameTyping(false)
+    setNameSuggestOpen(false)
     setForm({
       ...emptyForm,
       category: categories.includes('其他')
@@ -123,6 +127,8 @@ export function Products() {
     setPriceDirty(false)
     setCasePriceDirty(false)
     setCostDirty(false)
+    setNameTyping(false)
+    setNameSuggestOpen(false)
     setForm(productToForm(p))
     setShowForm(true)
   }
@@ -135,6 +141,8 @@ export function Products() {
     setPriceDirty(false)
     setCasePriceDirty(false)
     setCostDirty(false)
+    setNameTyping(false)
+    setNameSuggestOpen(false)
   }
 
   function fillFromHistory(hit: Product, source: '码' | '名称') {
@@ -143,8 +151,9 @@ export function Products() {
     setPriceDirty(false)
     setCasePriceDirty(false)
     setCostDirty(false)
-    setForm(productToForm(hit))
+    setNameTyping(false)
     setNameSuggestOpen(false)
+    setForm(productToForm(hit))
     setHistoryHint(
       `已按${source}匹配历史商品「${hit.name}」，已带出瓶码 ${hit.barcode}${
         hit.caseBarcode ? `、箱码 ${hit.caseBarcode}` : ''
@@ -360,6 +369,7 @@ export function Products() {
               <h2 id="product-form-title">
                 {editing ? '编辑商品' : '新增商品'}
               </h2>
+              <div className="modal-scroll">
               {historyHint && (
                 <div className="toast warn" style={{ marginBottom: '0.85rem' }}>
                   {historyHint}
@@ -419,10 +429,13 @@ export function Products() {
                     placeholder="输入名称模糊查询，选中后带出瓶码/箱码"
                     value={form.name}
                     onChange={(e) => {
-                      setForm((f) => ({ ...f, name: e.target.value }))
+                      setNameTyping(true)
                       setNameSuggestOpen(true)
+                      setForm((f) => ({ ...f, name: e.target.value }))
                     }}
-                    onFocus={() => setNameSuggestOpen(true)}
+                    onFocus={() => {
+                      if (nameTyping) setNameSuggestOpen(true)
+                    }}
                     onBlur={() => {
                       window.setTimeout(() => setNameSuggestOpen(false), 150)
                     }}
@@ -576,6 +589,7 @@ export function Products() {
                 维护规则：瓶码=零售最小单位；箱码=外箱码且不可与瓶码相同；箱规=一箱几件。
                 可用名称模糊查询或扫码带出历史编码与单价。库存始终按最小单位（如瓶）计数。
               </p>
+              </div>
               <div className="modal-actions">
                 <button
                   type="button"
@@ -609,6 +623,7 @@ export function Products() {
               onMouseDown={(e) => e.stopPropagation()}
             >
               <h2>维护商品分类</h2>
+              <div className="modal-scroll">
               <p className="muted" style={{ marginTop: 0 }}>
                 可新增、重命名、删除分类。「其他」为系统保留，不可删除。
               </p>
@@ -701,6 +716,7 @@ export function Products() {
                   )
                 })}
               </ul>
+              </div>
 
               <div className="modal-actions">
                 <button

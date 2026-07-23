@@ -179,6 +179,7 @@ export function Dashboard({ onGoPos, onGoInventory }: DashboardProps) {
               onMouseDown={(e) => e.stopPropagation()}
             >
               <h2>数据库设置</h2>
+              <div className="modal-scroll">
               <p className="muted" style={{ marginTop: 0 }}>
                 配置本地 ledger.db 存储位置。路径不在首页展示，仅在此查看与修改。
               </p>
@@ -243,6 +244,7 @@ export function Dashboard({ onGoPos, onGoInventory }: DashboardProps) {
                     恢复默认
                   </button>
                 )}
+              </div>
               </div>
 
               <div className="modal-actions">

@@ -534,18 +534,33 @@
   place-items: center;
   padding: 1rem;
   z-index: 1000;
+  overflow-y: auto;
   animation: fadeUp 0.2s ease;
+  align-items: start;
 }
 
 .modal {
   width: min(560px, 100%);
+  max-height: calc(100vh - 2rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--surface);
   border-radius: 18px;
-  padding: 1.35rem 1.4rem;
+  padding: 1.35rem 1.4rem 0;
   box-shadow: var(--shadow);
   position: relative;
   z-index: 1001;
   pointer-events: auto;
+  margin: 1rem auto;
+}
+
+.modal-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: 0.25rem;
 }
 
 .modal input,
@@ -581,7 +596,13 @@
   display: flex;
   justify-content: flex-end;
   gap: 0.65rem;
-  margin-top: 1.2rem;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 50;
+  margin-top: 0;
+  background: #fff;
+  padding: 0.85rem 0 1rem;
+  border-top: 1px solid var(--line);
 }
 
 .pos-layout {
@@ -882,6 +903,7 @@
 
 .name-suggest-field {
   position: relative;
+  z-index: 1;
 }
 
 .name-suggest-list {
@@ -889,7 +911,7 @@
   left: 0;
   right: 0;
   top: calc(100% + 4px);
-  z-index: 20;
+  z-index: 5;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -897,7 +919,7 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   box-shadow: var(--shadow);
-  max-height: 220px;
+  max-height: 160px;
   overflow: auto;
 }
 
