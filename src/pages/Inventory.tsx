@@ -278,7 +278,7 @@ export function Inventory() {
             {selected && (
               <div className="pack-hint">
                 <p>
-                  库存按<strong>{selected.unit}</strong>计：当前{' '}
+                  原库存（只读）：按<strong>{selected.unit}</strong>计{' '}
                   <strong>
                     {selected.stock} {selected.unit}
                   </strong>
@@ -381,7 +381,7 @@ export function Inventory() {
             ) : packMode === 'mixed' ? (
               <div className="mixed-qty">
                 <label>
-                  整箱数
+                  {type === 'in' ? '本次补货 · 整箱数' : '整箱数'}
                   <input
                     type="number"
                     min="0"
@@ -391,7 +391,9 @@ export function Inventory() {
                   />
                 </label>
                 <label>
-                  散装（不满一箱，{selected?.unit || '瓶'}）
+                  {type === 'in'
+                    ? `本次补货 · 散装（不满一箱，${selected?.unit || '瓶'}）`
+                    : `散装（不满一箱，${selected?.unit || '瓶'}）`}
                   <input
                     type="number"
                     min="0"
@@ -404,9 +406,13 @@ export function Inventory() {
               </div>
             ) : (
               <label>
-                {packMode === 'case'
-                  ? '箱数'
-                  : `数量（${selected?.unit || '瓶'}）`}
+                {type === 'in'
+                  ? packMode === 'case'
+                    ? '本次补货箱数'
+                    : `本次补货数量（${selected?.unit || '瓶'}）`
+                  : packMode === 'case'
+                    ? '箱数'
+                    : `数量（${selected?.unit || '瓶'}）`}
                 <input
                   type="number"
                   min="1"
@@ -420,10 +426,26 @@ export function Inventory() {
 
             {type !== 'adjust' && selected && (
               <p className="muted">
-                将{type === 'in' ? '增加' : '减少'}库存{' '}
-                <strong>
-                  {previewBase} {selected.unit}
-                </strong>
+                {type === 'in' ? (
+                  <>
+                    原库存 {selected.stock}
+                    {selected.unit}，本次补货{' '}
+                    <strong>
+                      {previewBase} {selected.unit}
+                    </strong>
+                    ，补货后{' '}
+                    <strong>
+                      {selected.stock + previewBase} {selected.unit}
+                    </strong>
+                  </>
+                ) : (
+                  <>
+                    将减少库存{' '}
+                    <strong>
+                      {previewBase} {selected.unit}
+                    </strong>
+                  </>
+                )}
                 {packMode === 'mixed' && units > 1 && (
                   <>
                     {' '}

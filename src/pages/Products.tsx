@@ -26,6 +26,7 @@ export function Products() {
     addProduct,
     updateProduct,
     deleteProduct,
+    adjustStock,
     addCategory,
     renameCategory,
     deleteCategory,
@@ -36,6 +37,8 @@ export function Products() {
   const [showForm, setShowForm] = useState(false)
   const [showCats, setShowCats] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  /** 编辑/匹配已有商品时：本次补货数量（不直接改原库存） */
+  const [restockQty, setRestockQty] = useState('0')
   const [newCat, setNewCat] = useState('')
   const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({})
   /** 单价是否被手动改过；未改则保存时用历史单价 */
@@ -107,6 +110,7 @@ export function Products() {
     setCostDirty(false)
     setNameTyping(false)
     setNameSuggestOpen(false)
+    setRestockQty('0')
     setForm({
       ...emptyForm,
       category: categories.includes('其他')
@@ -129,6 +133,7 @@ export function Products() {
     setCostDirty(false)
     setNameTyping(false)
     setNameSuggestOpen(false)
+    setRestockQty('0')
     setForm(productToForm(p))
     setShowForm(true)
   }
@@ -143,6 +148,7 @@ export function Products() {
     setCostDirty(false)
     setNameTyping(false)
     setNameSuggestOpen(false)
+    setRestockQty('0')
   }
 
   function fillFromHistory(hit: Product, source: '码' | '名称') {
@@ -153,13 +159,14 @@ export function Products() {
     setCostDirty(false)
     setNameTyping(false)
     setNameSuggestOpen(false)
+    setRestockQty('0')
     setForm(productToForm(hit))
     setHistoryHint(
       `已按${source}匹配历史商品「${hit.name}」，已带出瓶码 ${hit.barcode}${
         hit.caseBarcode ? `、箱码 ${hit.caseBarcode}` : ''
       }，历史瓶价 ${formatMoney(hit.price)}${
         hit.casePrice > 0 ? ` / 箱价 ${formatMoney(hit.casePrice)}` : ''
-      }。可修改；不改则按历史价保存。`,
+      }。可修改；不改则按历史价保存。补货请填「本次补货数量」。`,
     )
   }
 
@@ -210,6 +217,11 @@ export function Products() {
       ? hist.casePrice || 0
       : Number(form.casePrice) || 0
 
+    const restock = Math.max(0, Math.floor(Number(restockQty) || 0))
+    const liveStock = editing
+      ? (products.find((p) => p.id === editing.id)?.stock ?? editing.stock)
+      : 0
+
     const payload = {
       barcode: normalizeScanCode(form.barcode) || form.barcode.trim(),
       caseBarcode:
@@ -220,7 +232,7 @@ export function Products() {
       price,
       cost,
       casePrice,
-      stock: Number(form.stock) || 0,
+      stock: editing ? liveStock : Number(form.stock) || 0,
       unit: form.unit.trim() || '瓶',
       minStock: Number(form.minStock) || 0,
     }
@@ -237,14 +249,38 @@ export function Products() {
       return
     }
 
-    if (editing) {
-      updateProduct(editing.id, payload)
+      if (editing) {
+      updateProduct(editing.id, {
+        barcode: payload.barcode,
+        caseBarcode: payload.caseBarcode,
+        unitsPerCase: payload.unitsPerCase,
+        name: payload.name,
+        category: payload.category,
+        price: payload.price,
+        cost: payload.cost,
+        casePrice: payload.casePrice,
+        unit: payload.unit,
+        minStock: payload.minStock,
+      })
+      if (restock > 0) {
+        adjustStock(
+          editing.id,
+          restock,
+          'in',
+          `商品编辑补货 +${restock}${payload.unit}`,
+        )
+      }
     } else {
       addProduct(payload)
     }
     closeForm()
     setForm(emptyForm)
   }
+
+  const editingLiveStock = editing
+    ? (products.find((p) => p.id === editing.id)?.stock ?? editing.stock)
+    : 0
+  const restockPreview = Math.max(0, Math.floor(Number(restockQty) || 0))
 
   return (
     <div className="page">
@@ -562,17 +598,50 @@ export function Products() {
                     </small>
                   )}
                 </label>
-                <label>
-                  库存（按最小单位）
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.stock}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, stock: e.target.value }))
-                    }
-                  />
-                </label>
+                {editing ? (
+                  <>
+                    <label>
+                      原库存（按最小单位）
+                      <input
+                        type="text"
+                        readOnly
+                        className="readonly-field"
+                        value={`${editingLiveStock} ${form.unit.trim() || '瓶'}`}
+                      />
+                    </label>
+                    <label>
+                      本次补货数量
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="不补货填 0"
+                        value={restockQty}
+                        onChange={(e) => setRestockQty(e.target.value)}
+                      />
+                      <small className="field-hint">
+                        补货后库存{' '}
+                        {editingLiveStock + restockPreview}
+                        {form.unit.trim() || '瓶'}
+                        {restockPreview > 0
+                          ? `（${editingLiveStock} + ${restockPreview}）`
+                          : ''}
+                      </small>
+                    </label>
+                  </>
+                ) : (
+                  <label>
+                    初始库存（按最小单位）
+                    <input
+                      type="number"
+                      min="0"
+                      value={form.stock}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, stock: e.target.value }))
+                      }
+                    />
+                  </label>
+                )}
                 <label>
                   最低库存
                   <input

@@ -1051,6 +1051,19 @@
   font-size: 0.88rem;
 }
 
+.field-hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.readonly-field {
+  background: var(--bg, #f4f7f5) !important;
+  color: var(--text);
+  cursor: default;
+}
+
 .chip-case {
   display: block;
   margin-top: 0.15rem;
