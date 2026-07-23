@@ -347,14 +347,14 @@ export function Products() {
               <th>箱规</th>
               <th>瓶价</th>
               <th>库存</th>
-              <th>单位</th>
-              <th>操作</th>
+              <th className="col-unit">单位</th>
+              <th className="col-actions">操作</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((p) => (
               <tr key={p.id} className={p.stock <= p.minStock ? 'row-warn' : ''}>
-                <td>
+                <td className="cell-name">
                   {p.name}
                   <div className="muted" style={{ fontSize: '0.78rem' }}>
                     {p.category}
@@ -374,26 +374,28 @@ export function Products() {
                     <span className="badge danger inline">低</span>
                   )}
                 </td>
-                <td>{p.unit}</td>
-                <td className="actions">
-                  <button
-                    type="button"
-                    className="link"
-                    onClick={() => openEdit(p)}
-                  >
-                    编辑
-                  </button>
-                  <button
-                    type="button"
-                    className="link danger"
-                    onClick={() => {
-                      if (confirm(`确定删除「${p.name}」？`)) {
-                        deleteProduct(p.id)
-                      }
-                    }}
-                  >
-                    删除
-                  </button>
+                <td className="col-unit">{p.unit}</td>
+                <td className="col-actions">
+                  <div className="actions">
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => openEdit(p)}
+                    >
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      className="link danger"
+                      onClick={() => {
+                        if (confirm(`确定删除「${p.name}」？`)) {
+                          deleteProduct(p.id)
+                        }
+                      }}
+                    >
+                      删除
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
