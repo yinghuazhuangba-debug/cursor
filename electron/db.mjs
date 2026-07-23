@@ -89,10 +89,13 @@ function ensureSchema() {
     CREATE TABLE IF NOT EXISTS products (
       id TEXT PRIMARY KEY,
       barcode TEXT NOT NULL,
+      case_barcode TEXT NOT NULL DEFAULT '',
+      units_per_case INTEGER NOT NULL DEFAULT 1,
       name TEXT NOT NULL,
       category TEXT NOT NULL,
       price REAL NOT NULL,
       cost REAL NOT NULL,
+      case_price REAL NOT NULL DEFAULT 0,
       stock INTEGER NOT NULL,
       unit TEXT NOT NULL,
       min_stock INTEGER NOT NULL,
@@ -131,6 +134,18 @@ function ensureSchema() {
       created_at TEXT NOT NULL
     );
   `)
+
+  // 兼容旧库：补齐箱码/箱规字段
+  const cols = all(`PRAGMA table_info(products)`).map((c) => c.name)
+  if (!cols.includes('case_barcode')) {
+    exec(`ALTER TABLE products ADD COLUMN case_barcode TEXT NOT NULL DEFAULT ''`)
+  }
+  if (!cols.includes('units_per_case')) {
+    exec(`ALTER TABLE products ADD COLUMN units_per_case INTEGER NOT NULL DEFAULT 1`)
+  }
+  if (!cols.includes('case_price')) {
+    exec(`ALTER TABLE products ADD COLUMN case_price REAL NOT NULL DEFAULT 0`)
+  }
 }
 
 function openAt(targetPath) {
@@ -214,10 +229,13 @@ function mapProduct(row) {
   return {
     id: row.id,
     barcode: row.barcode,
+    caseBarcode: row.case_barcode || '',
+    unitsPerCase: Math.max(1, Number(row.units_per_case) || 1),
     name: row.name,
     category: row.category,
     price: row.price,
     cost: row.cost,
+    casePrice: Number(row.case_price) || 0,
     stock: row.stock,
     unit: row.unit,
     minStock: row.min_stock,
@@ -283,15 +301,19 @@ export function saveState(state) {
     for (const p of state.products) {
       run(
         `INSERT INTO products (
-          id, barcode, name, category, price, cost, stock, unit, min_stock, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, barcode, case_barcode, units_per_case, name, category,
+          price, cost, case_price, stock, unit, min_stock, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           p.id,
           p.barcode,
+          p.caseBarcode || '',
+          Math.max(1, Number(p.unitsPerCase) || 1),
           p.name,
           p.category,
           p.price,
           p.cost,
+          Number(p.casePrice) || 0,
           p.stock,
           p.unit,
           p.minStock,

@@ -1,4 +1,5 @@
 import type { Product } from '../types'
+import { normalizeProduct } from '../types'
 
 function id(): string {
   return crypto.randomUUID()
@@ -7,33 +8,39 @@ function id(): string {
 const now = () => new Date().toISOString()
 
 export const SEED_PRODUCTS: Product[] = [
-  {
+  normalizeProduct({
     id: id(),
     barcode: '6901234567001',
+    caseBarcode: '6901234567101',
+    unitsPerCase: 24,
     name: '农夫山泉 550ml',
     category: '饮料',
     price: 2.0,
     cost: 1.0,
+    casePrice: 45.0,
     stock: 120,
     unit: '瓶',
     minStock: 20,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  normalizeProduct({
     id: id(),
     barcode: '6901234567002',
+    caseBarcode: '6901234567102',
+    unitsPerCase: 24,
     name: '可口可乐 330ml',
     category: '饮料',
     price: 3.5,
     cost: 2.0,
+    casePrice: 78.0,
     stock: 80,
     unit: '罐',
     minStock: 15,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  normalizeProduct({
     id: id(),
     barcode: '6901234567003',
     name: '康师傅红烧牛肉面',
@@ -43,10 +50,12 @@ export const SEED_PRODUCTS: Product[] = [
     stock: 60,
     unit: '袋',
     minStock: 10,
+    unitsPerCase: 12,
+    caseBarcode: '6901234567103',
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  normalizeProduct({
     id: id(),
     barcode: '6901234567004',
     name: '乐事薯片原味',
@@ -58,8 +67,8 @@ export const SEED_PRODUCTS: Product[] = [
     minStock: 10,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  normalizeProduct({
     id: id(),
     barcode: '6901234567005',
     name: '清风抽纸 3层',
@@ -71,8 +80,8 @@ export const SEED_PRODUCTS: Product[] = [
     minStock: 8,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  normalizeProduct({
     id: id(),
     barcode: '6901234567006',
     name: '蓝月亮洗衣液',
@@ -84,8 +93,8 @@ export const SEED_PRODUCTS: Product[] = [
     minStock: 5,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  normalizeProduct({
     id: id(),
     barcode: '6901234567007',
     name: '新鲜鸡蛋 10枚',
@@ -97,8 +106,8 @@ export const SEED_PRODUCTS: Product[] = [
     minStock: 8,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  normalizeProduct({
     id: id(),
     barcode: '6901234567008',
     name: '香蕉（称重）',
@@ -110,8 +119,8 @@ export const SEED_PRODUCTS: Product[] = [
     minStock: 10,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  normalizeProduct({
     id: id(),
     barcode: '6901234567009',
     name: '金龙鱼调和油 5L',
@@ -123,8 +132,8 @@ export const SEED_PRODUCTS: Product[] = [
     minStock: 3,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  normalizeProduct({
     id: id(),
     barcode: '6901234567010',
     name: '五常大米 5kg',
@@ -136,8 +145,8 @@ export const SEED_PRODUCTS: Product[] = [
     minStock: 5,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  normalizeProduct({
     id: id(),
     barcode: '6901234567011',
     name: '奥利奥夹心饼干',
@@ -149,8 +158,8 @@ export const SEED_PRODUCTS: Product[] = [
     minStock: 10,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  normalizeProduct({
     id: id(),
     barcode: '6901234567012',
     name: '蒙牛纯牛奶 250ml×12',
@@ -160,7 +169,8 @@ export const SEED_PRODUCTS: Product[] = [
     stock: 4,
     unit: '箱',
     minStock: 6,
+    unitsPerCase: 1,
     createdAt: now(),
     updatedAt: now(),
-  },
+  }),
 ]

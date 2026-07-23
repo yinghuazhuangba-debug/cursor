@@ -9,10 +9,12 @@ import { SEED_PRODUCTS } from '../data/seed'
 import type {
   AppState,
   CartItem,
+  PackType,
   Product,
   Sale,
   StockLog,
 } from '../types'
+import { normalizeProduct } from '../types'
 import { normalizeScanCode } from '../utils/scanCode'
 
 const STORAGE_KEY = 'xianlin-supermarket-v1'
@@ -55,12 +57,24 @@ function loadLocalState(): AppState {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as AppState
-      if (parsed.products?.length) return parsed
+      if (parsed.products?.length) {
+        return {
+          ...parsed,
+          products: parsed.products.map((p) => normalizeProduct(p)),
+        }
+      }
     }
   } catch {
     /* ignore */
   }
   return { products: SEED_PRODUCTS, sales: [], stockLogs: [] }
+}
+
+function normalizeState(appState: AppState): AppState {
+  return {
+    ...appState,
+    products: (appState.products || []).map((p) => normalizeProduct(p)),
+  }
 }
 
 let state: AppState = { products: [], sales: [], stockLogs: [] }
@@ -117,7 +131,7 @@ export function bootStore() {
       dbPath = info.path
       dbDefaultPath = info.defaultPath
       dbIsCustom = info.isCustom
-      state = await window.desktopLedger.load()
+      state = normalizeState(await window.desktopLedger.load())
     } else {
       state = loadLocalState()
       dbPath = ''
@@ -154,7 +168,7 @@ export function useAppStore() {
       dbPath = result.info.path
       dbDefaultPath = result.info.defaultPath
       dbIsCustom = result.info.isCustom
-      state = result.state
+      state = normalizeState(result.state)
       setPath(dbPath)
       setDefaultPath(dbDefaultPath)
       setIsCustom(dbIsCustom)
@@ -164,12 +178,12 @@ export function useAppStore() {
   )
   const addProduct = useCallback(
     (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
-      const product: Product = {
+      const product = normalizeProduct({
         ...data,
         id: uid(),
         createdAt: now(),
         updatedAt: now(),
-      }
+      })
       setState((s) => ({ ...s, products: [...s.products, product] }))
       return product
     },
@@ -181,7 +195,9 @@ export function useAppStore() {
       setState((s) => ({
         ...s,
         products: s.products.map((p) =>
-          p.id === id ? { ...p, ...patch, updatedAt: now() } : p,
+          p.id === id
+            ? normalizeProduct({ ...p, ...patch, updatedAt: now() })
+            : p,
         ),
       }))
     },
@@ -245,11 +261,12 @@ export function useAppStore() {
       setState((s) => {
         const products = [...s.products]
         const saleItems = items.map((item) => {
+          const stockQty = item.stockQty ?? item.quantity
           const idx = products.findIndex((p) => p.id === item.productId)
           if (idx >= 0) {
             products[idx] = {
               ...products[idx],
-              stock: Math.max(0, products[idx].stock - item.quantity),
+              stock: Math.max(0, products[idx].stock - stockQty),
               updatedAt: now(),
             }
           }
@@ -259,6 +276,8 @@ export function useAppStore() {
             price: item.price,
             quantity: item.quantity,
             subtotal: +(item.price * item.quantity).toFixed(2),
+            stockQty,
+            pack: item.pack,
           }
         })
 
@@ -278,13 +297,14 @@ export function useAppStore() {
 
         const logs: StockLog[] = items.map((item) => {
           const product = s.products.find((p) => p.id === item.productId)!
-          const after = Math.max(0, product.stock - item.quantity)
+          const stockQty = item.stockQty ?? item.quantity
+          const after = Math.max(0, product.stock - stockQty)
           return {
             id: uid(),
             productId: item.productId,
             productName: item.name,
             type: 'sale' as const,
-            quantity: item.quantity,
+            quantity: stockQty,
             before: product.stock,
             after,
             note: `销售单 ${sale!.id.slice(0, 8)}`,
@@ -336,15 +356,32 @@ export function useAppStore() {
     return result
   }, [applyDbSwitch])
 
-  const findByBarcode = useCallback(
-    (barcode: string) => {
-      const code = normalizeScanCode(barcode)
-      const raw = barcode.trim()
-      return snapshot.products.find(
-        (p) => p.barcode === code || p.barcode === raw,
+  const findByScan = useCallback(
+    (raw: string): { product: Product; pack: PackType } | null => {
+      const code = normalizeScanCode(raw)
+      const trimmed = raw.trim()
+      if (!code && !trimmed) return null
+
+      const byCase = snapshot.products.find(
+        (p) =>
+          p.caseBarcode &&
+          (p.caseBarcode === code || p.caseBarcode === trimmed),
       )
+      if (byCase) return { product: byCase, pack: 'case' }
+
+      const byUnit = snapshot.products.find(
+        (p) => p.barcode === code || p.barcode === trimmed,
+      )
+      if (byUnit) return { product: byUnit, pack: 'unit' }
+
+      return null
     },
     [snapshot.products],
+  )
+
+  const findByBarcode = useCallback(
+    (barcode: string) => findByScan(barcode)?.product,
+    [findByScan],
   )
 
   const lowStockProducts = useMemo(
@@ -370,6 +407,7 @@ export function useAppStore() {
     chooseOpenDatabasePath,
     resetDatabasePath,
     findByBarcode,
+    findByScan,
     lowStockProducts,
   }
 }

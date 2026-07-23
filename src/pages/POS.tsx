@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CartItem, Sale } from '../types'
-import { PAYMENT_LABELS } from '../types'
+import { caseSalePrice, PAYMENT_LABELS } from '../types'
 import { formatMoney, useAppStore } from '../store/useStore'
 import { normalizeScanCode } from '../utils/scanCode'
 
 export function POS() {
-  const { products, findByBarcode, checkout } = useAppStore()
+  const { products, findByScan, checkout } = useAppStore()
   const [query, setQuery] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
   const [paymentMethod, setPaymentMethod] =
     useState<Sale['paymentMethod']>('wechat')
   const [paidInput, setPaidInput] = useState('')
   const [message, setMessage] = useState<string | null>(null)
+  const [priceFlash, setPriceFlash] = useState<string | null>(null)
   const [lastSale, setLastSale] = useState<Sale | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -27,80 +28,151 @@ export function POS() {
     inputRef.current?.focus()
   }, [])
 
-  function addProduct(productId: string) {
-    const product = products.find((p) => p.id === productId)
+  function flashPrice(text: string) {
+    setPriceFlash(text)
+    window.setTimeout(() => setPriceFlash(null), 2500)
+  }
+
+  function addCartItem(item: CartItem, stockNeed: number) {
+    const product = products.find((p) => p.id === item.productId)
     if (!product) return
-    if (product.stock <= 0) {
-      setMessage(`${product.name} 库存不足`)
+    if (product.stock < stockNeed) {
+      setMessage(
+        `${product.name} 库存不足（剩 ${product.stock}${product.unit}）`,
+      )
       return
     }
+
     setCart((prev) => {
-      const existing = prev.find((i) => i.productId === productId)
+      const existing = prev.find(
+        (i) =>
+          i.productId === item.productId &&
+          i.pack === item.pack &&
+          i.price === item.price &&
+          i.name === item.name,
+      )
       if (existing) {
-        if (existing.quantity >= product.stock) {
-          setMessage(`${product.name} 库存仅剩 ${product.stock}`)
+        const nextQty = existing.quantity + item.quantity
+        const nextStock =
+          (existing.stockQty ?? existing.quantity) + stockNeed
+        if (nextStock > product.stock) {
+          setMessage(
+            `${product.name} 库存不足（剩 ${product.stock}${product.unit}）`,
+          )
           return prev
         }
         return prev.map((i) =>
-          i.productId === productId
-            ? { ...i, quantity: i.quantity + 1 }
+          i === existing
+            ? { ...i, quantity: nextQty, stockQty: nextStock }
             : i,
         )
       }
-      return [
-        ...prev,
-        {
-          productId: product.id,
-          name: product.name,
-          price: product.price,
-          quantity: 1,
-        },
-      ]
+      return [...prev, { ...item, stockQty: stockNeed }]
     })
     setMessage(null)
     setQuery('')
     inputRef.current?.focus()
   }
 
+  /** 按瓶/最小单位加入购物车 */
+  function addUnit(productId: string, qty = 1) {
+    const product = products.find((p) => p.id === productId)
+    if (!product) return
+    addCartItem(
+      {
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: qty,
+        pack: 'unit',
+      },
+      qty,
+    )
+    flashPrice(
+      `${product.name} 单价 ${formatMoney(product.price)} / ${product.unit}`,
+    )
+  }
+
+  /** 按整箱加入购物车 */
+  function addCase(productId: string, cases = 1) {
+    const product = products.find((p) => p.id === productId)
+    if (!product) return
+    const perCase = Math.max(1, product.unitsPerCase || 1)
+    const stockNeed = cases * perCase
+    const price = caseSalePrice(product)
+    addCartItem(
+      {
+        productId: product.id,
+        name: `${product.name}（整箱${perCase}${product.unit}）`,
+        price,
+        quantity: cases,
+        pack: 'case',
+      },
+      stockNeed,
+    )
+    flashPrice(
+      `${product.name} 整箱 ${formatMoney(price)}（${perCase}${product.unit}，瓶价 ${formatMoney(product.price)}）`,
+    )
+  }
+
   function handleScan() {
-    const q = normalizeScanCode(query)
-    if (!q) return
-    const byBarcode = findByBarcode(q)
-    if (byBarcode) {
-      addProduct(byBarcode.id)
-      return
-    }
-    // 原始内容再试一次（兼容未规范化情况）
     const raw = query.trim()
-    const byRaw = raw !== q ? findByBarcode(raw) : undefined
-    if (byRaw) {
-      addProduct(byRaw.id)
+    const code = normalizeScanCode(raw)
+    if (!code && !raw) return
+
+    const hit = findByScan(raw)
+    if (hit) {
+      if (hit.pack === 'case') addCase(hit.product.id, 1)
+      else addUnit(hit.product.id, 1)
       return
     }
-    const byName = products.filter((p) => p.name.includes(raw) || p.name.includes(q))
+
+    const byName = products.filter(
+      (p) => p.name.includes(raw) || p.name.includes(code),
+    )
     if (byName.length === 1) {
-      addProduct(byName[0].id)
+      addUnit(byName[0].id, 1)
       return
     }
     if (byName.length === 0) {
-      setMessage(`未找到商品：${q}`)
+      setMessage(`未找到商品：${code || raw}`)
     }
   }
 
-  function setQty(productId: string, quantity: number) {
+  function setQty(productId: string, pack: CartItem['pack'], quantity: number, name: string, price: number) {
     const product = products.find((p) => p.id === productId)
     if (!product) return
     if (quantity <= 0) {
-      setCart((prev) => prev.filter((i) => i.productId !== productId))
+      setCart((prev) =>
+        prev.filter(
+          (i) =>
+            !(
+              i.productId === productId &&
+              i.pack === pack &&
+              i.name === name &&
+              i.price === price
+            ),
+        ),
+      )
       return
     }
-    if (quantity > product.stock) {
-      setMessage(`库存不足，最多 ${product.stock}`)
+
+    const per =
+      pack === 'case' ? Math.max(1, product.unitsPerCase || 1) : 1
+    const stockNeed = quantity * per
+    if (stockNeed > product.stock) {
+      setMessage(`库存不足，最多约 ${Math.floor(product.stock / per)}`)
       return
     }
+
     setCart((prev) =>
       prev.map((i) =>
-        i.productId === productId ? { ...i, quantity } : i,
+        i.productId === productId &&
+        i.pack === pack &&
+        i.name === name &&
+        i.price === price
+          ? { ...i, quantity, stockQty: stockNeed }
+          : i,
       ),
     )
   }
@@ -116,7 +188,8 @@ export function POS() {
     }
     for (const item of cart) {
       const p = products.find((x) => x.id === item.productId)
-      if (!p || p.stock < item.quantity) {
+      const need = item.stockQty ?? item.quantity
+      if (!p || p.stock < need) {
         setMessage(`${item.name} 库存不足`)
         return
       }
@@ -127,22 +200,24 @@ export function POS() {
       setCart([])
       setPaidInput('')
       setMessage(null)
+      setPriceFlash(null)
       inputRef.current?.focus()
     }
   }
 
   const suggestions = useMemo(() => {
     const q = query.trim()
-    if (!q || findByBarcode(q)) return []
+    if (!q || findByScan(q)) return []
     return products
       .filter(
         (p) =>
           p.name.includes(q) ||
           p.barcode.includes(q) ||
+          (p.caseBarcode && p.caseBarcode.includes(q)) ||
           p.category.includes(q),
       )
       .slice(0, 8)
-  }, [query, products, findByBarcode])
+  }, [query, products, findByScan])
 
   return (
     <div className="page pos-page">
@@ -152,7 +227,7 @@ export function POS() {
             <input
               ref={inputRef}
               className="scan-input"
-              placeholder="扫描包装二维码/条码，或输入商品名后回车"
+              placeholder="扫瓶码按瓶卖 / 扫箱码按箱卖，回车加入"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -167,15 +242,20 @@ export function POS() {
             </button>
           </div>
 
+          {priceFlash && <div className="price-flash">{priceFlash}</div>}
+
           {suggestions.length > 0 && (
             <ul className="suggest-list">
               {suggestions.map((p) => (
                 <li key={p.id}>
-                  <button type="button" onClick={() => addProduct(p.id)}>
+                  <button type="button" onClick={() => addUnit(p.id)}>
                     <span>
                       <strong>{p.name}</strong>
                       <small>
-                        {p.barcode} · 库存 {p.stock}
+                        瓶码 {p.barcode}
+                        {p.caseBarcode ? ` · 箱码 ${p.caseBarcode}` : ''} · 库存{' '}
+                        {p.stock}
+                        {p.unit}
                       </small>
                     </span>
                     <em>{formatMoney(p.price)}</em>
@@ -202,20 +282,31 @@ export function POS() {
                 {cart.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="empty-cell">
-                      扫码或搜索商品加入购物车
+                      扫瓶码显示单价并加入；扫箱码按整箱价加入
                     </td>
                   </tr>
                 ) : (
                   cart.map((item) => (
-                    <tr key={item.productId}>
-                      <td>{item.name}</td>
+                    <tr key={`${item.productId}-${item.pack}-${item.name}-${item.price}`}>
+                      <td>
+                        {item.name}
+                        {item.pack === 'case' && (
+                          <span className="badge soft inline">箱</span>
+                        )}
+                      </td>
                       <td>{formatMoney(item.price)}</td>
                       <td>
                         <div className="qty-ctrl">
                           <button
                             type="button"
                             onClick={() =>
-                              setQty(item.productId, item.quantity - 1)
+                              setQty(
+                                item.productId,
+                                item.pack,
+                                item.quantity - 1,
+                                item.name,
+                                item.price,
+                              )
                             }
                           >
                             −
@@ -227,14 +318,23 @@ export function POS() {
                             onChange={(e) =>
                               setQty(
                                 item.productId,
+                                item.pack,
                                 Number(e.target.value) || 0,
+                                item.name,
+                                item.price,
                               )
                             }
                           />
                           <button
                             type="button"
                             onClick={() =>
-                              setQty(item.productId, item.quantity + 1)
+                              setQty(
+                                item.productId,
+                                item.pack,
+                                item.quantity + 1,
+                                item.name,
+                                item.price,
+                              )
                             }
                           >
                             +
@@ -246,7 +346,15 @@ export function POS() {
                         <button
                           type="button"
                           className="link danger"
-                          onClick={() => setQty(item.productId, 0)}
+                          onClick={() =>
+                            setQty(
+                              item.productId,
+                              item.pack,
+                              0,
+                              item.name,
+                              item.price,
+                            )
+                          }
                         >
                           移除
                         </button>
@@ -259,7 +367,7 @@ export function POS() {
           </div>
 
           <div className="quick-grid">
-            <p className="section-label">快捷选品</p>
+            <p className="section-label">快捷选品（点按瓶加入）</p>
             <div className="chip-grid">
               {products.slice(0, 12).map((p) => (
                 <button
@@ -267,12 +375,18 @@ export function POS() {
                   type="button"
                   className="product-chip"
                   disabled={p.stock <= 0}
-                  onClick={() => addProduct(p.id)}
+                  onClick={() => addUnit(p.id)}
                 >
                   <strong>{p.name}</strong>
                   <span>
-                    {formatMoney(p.price)} · 余{p.stock}
+                    {formatMoney(p.price)}/{p.unit} · 余{p.stock}
                   </span>
+                  {p.unitsPerCase > 1 && (
+                    <span className="chip-case">
+                      箱 {formatMoney(caseSalePrice(p))} · {p.unitsPerCase}
+                      {p.unit}/箱
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

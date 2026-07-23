@@ -7,12 +7,15 @@ import { normalizeScanCode } from '../utils/scanCode'
 
 const emptyForm = {
   barcode: '',
+  caseBarcode: '',
+  unitsPerCase: '1',
   name: '',
   category: '其他' as Category,
   price: '',
   cost: '',
+  casePrice: '',
   stock: '',
-  unit: '件',
+  unit: '瓶',
   minStock: '5',
 }
 
@@ -33,6 +36,7 @@ export function Products() {
         !q ||
         p.name.includes(q) ||
         p.barcode.includes(q) ||
+        (p.caseBarcode && p.caseBarcode.includes(q)) ||
         p.category.includes(q)
       return matchCat && matchQ
     })
@@ -54,10 +58,13 @@ export function Products() {
     setEditing(p)
     setForm({
       barcode: p.barcode,
+      caseBarcode: p.caseBarcode || '',
+      unitsPerCase: String(p.unitsPerCase || 1),
       name: p.name,
       category: p.category,
       price: String(p.price),
       cost: String(p.cost),
+      casePrice: String(p.casePrice || ''),
       stock: String(p.stock),
       unit: p.unit,
       minStock: String(p.minStock),
@@ -74,12 +81,16 @@ export function Products() {
     e.preventDefault()
     const payload = {
       barcode: normalizeScanCode(form.barcode) || form.barcode.trim(),
+      caseBarcode:
+        normalizeScanCode(form.caseBarcode) || form.caseBarcode.trim(),
+      unitsPerCase: Math.max(1, Number(form.unitsPerCase) || 1),
       name: form.name.trim(),
       category: form.category,
       price: Number(form.price) || 0,
       cost: Number(form.cost) || 0,
+      casePrice: Number(form.casePrice) || 0,
       stock: Number(form.stock) || 0,
-      unit: form.unit.trim() || '件',
+      unit: form.unit.trim() || '瓶',
       minStock: Number(form.minStock) || 0,
     }
     if (!payload.barcode || !payload.name) return
@@ -122,11 +133,11 @@ export function Products() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>条码</th>
+              <th>瓶/零售码</th>
+              <th>箱码</th>
               <th>名称</th>
-              <th>分类</th>
-              <th>售价</th>
-              <th>进价</th>
+              <th>箱规</th>
+              <th>瓶价</th>
               <th>库存</th>
               <th>单位</th>
               <th>操作</th>
@@ -136,10 +147,19 @@ export function Products() {
             {filtered.map((p) => (
               <tr key={p.id} className={p.stock <= p.minStock ? 'row-warn' : ''}>
                 <td className="mono">{p.barcode}</td>
-                <td>{p.name}</td>
-                <td>{p.category}</td>
+                <td className="mono">{p.caseBarcode || '—'}</td>
+                <td>
+                  {p.name}
+                  <div className="muted" style={{ fontSize: '0.78rem' }}>
+                    {p.category}
+                  </div>
+                </td>
+                <td>
+                  {p.unitsPerCase > 1
+                    ? `${p.unitsPerCase}${p.unit}/箱`
+                    : '—'}
+                </td>
                 <td>{formatMoney(p.price)}</td>
-                <td>{formatMoney(p.cost)}</td>
                 <td>
                   {p.stock}
                   {p.stock <= p.minStock && (
@@ -202,16 +222,28 @@ export function Products() {
               </h2>
               <div className="form-grid">
                 <label>
-                  条码 / 二维码内容
+                  瓶码 / 零售码
                   <input
                     ref={firstInputRef}
                     type="text"
                     autoComplete="off"
                     required
-                    placeholder="可用扫码枪直接扫入"
+                    placeholder="扫瓶身码"
                     value={form.barcode}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, barcode: e.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  箱码（可选）
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    placeholder="扫外箱码"
+                    value={form.caseBarcode}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, caseBarcode: e.target.value }))
                     }
                   />
                 </label>
@@ -246,10 +278,11 @@ export function Products() {
                   </select>
                 </label>
                 <label>
-                  单位
+                  最小单位
                   <input
                     type="text"
                     autoComplete="off"
+                    placeholder="瓶/袋/罐"
                     value={form.unit}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, unit: e.target.value }))
@@ -257,7 +290,19 @@ export function Products() {
                   />
                 </label>
                 <label>
-                  售价
+                  箱规（一箱几件）
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form.unitsPerCase}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, unitsPerCase: e.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  瓶/零售单价
                   <input
                     type="number"
                     step="0.01"
@@ -270,7 +315,20 @@ export function Products() {
                   />
                 </label>
                 <label>
-                  进价
+                  整箱售价（可空）
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="空则=单价×箱规"
+                    value={form.casePrice}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, casePrice: e.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  进价（按最小单位）
                   <input
                     type="number"
                     step="0.01"
@@ -282,7 +340,7 @@ export function Products() {
                   />
                 </label>
                 <label>
-                  库存
+                  库存（按最小单位）
                   <input
                     type="number"
                     min="0"
@@ -304,6 +362,9 @@ export function Products() {
                   />
                 </label>
               </div>
+              <p className="muted" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
+                例：一箱矿泉水 24 瓶。瓶码用于零售扫码；箱码用于整箱入库。库存始终按「瓶」计数。
+              </p>
               <div className="modal-actions">
                 <button
                   type="button"

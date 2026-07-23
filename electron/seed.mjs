@@ -4,36 +4,53 @@ function id() {
 
 const now = () => new Date().toISOString()
 
+function product(p) {
+  return {
+    ...p,
+    caseBarcode: p.caseBarcode || '',
+    unitsPerCase: Math.max(1, Number(p.unitsPerCase) || 1),
+    casePrice: Number(p.casePrice) || 0,
+  }
+}
+
 export const SEED_PRODUCTS = [
-  {
+  product({
     id: id(),
     barcode: '6901234567001',
+    caseBarcode: '6901234567101',
+    unitsPerCase: 24,
     name: '农夫山泉 550ml',
     category: '饮料',
     price: 2.0,
     cost: 1.0,
+    casePrice: 45.0,
     stock: 120,
     unit: '瓶',
     minStock: 20,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  product({
     id: id(),
     barcode: '6901234567002',
+    caseBarcode: '6901234567102',
+    unitsPerCase: 24,
     name: '可口可乐 330ml',
     category: '饮料',
     price: 3.5,
     cost: 2.0,
+    casePrice: 78.0,
     stock: 80,
     unit: '罐',
     minStock: 15,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  product({
     id: id(),
     barcode: '6901234567003',
+    caseBarcode: '6901234567103',
+    unitsPerCase: 12,
     name: '康师傅红烧牛肉面',
     category: '零食',
     price: 4.5,
@@ -43,8 +60,8 @@ export const SEED_PRODUCTS = [
     minStock: 10,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  product({
     id: id(),
     barcode: '6901234567004',
     name: '乐事薯片原味',
@@ -56,8 +73,8 @@ export const SEED_PRODUCTS = [
     minStock: 10,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  product({
     id: id(),
     barcode: '6901234567005',
     name: '清风抽纸 3层',
@@ -69,8 +86,8 @@ export const SEED_PRODUCTS = [
     minStock: 8,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  product({
     id: id(),
     barcode: '6901234567006',
     name: '蓝月亮洗衣液',
@@ -82,8 +99,8 @@ export const SEED_PRODUCTS = [
     minStock: 5,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  product({
     id: id(),
     barcode: '6901234567007',
     name: '新鲜鸡蛋 10枚',
@@ -95,8 +112,8 @@ export const SEED_PRODUCTS = [
     minStock: 8,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  product({
     id: id(),
     barcode: '6901234567008',
     name: '香蕉（称重）',
@@ -108,8 +125,8 @@ export const SEED_PRODUCTS = [
     minStock: 10,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  product({
     id: id(),
     barcode: '6901234567009',
     name: '金龙鱼调和油 5L',
@@ -121,8 +138,8 @@ export const SEED_PRODUCTS = [
     minStock: 3,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  product({
     id: id(),
     barcode: '6901234567010',
     name: '五常大米 5kg',
@@ -134,8 +151,8 @@ export const SEED_PRODUCTS = [
     minStock: 5,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  product({
     id: id(),
     barcode: '6901234567011',
     name: '奥利奥夹心饼干',
@@ -147,8 +164,8 @@ export const SEED_PRODUCTS = [
     minStock: 10,
     createdAt: now(),
     updatedAt: now(),
-  },
-  {
+  }),
+  product({
     id: id(),
     barcode: '6901234567012',
     name: '蒙牛纯牛奶 250ml×12',
@@ -160,5 +177,5 @@ export const SEED_PRODUCTS = [
     minStock: 6,
     createdAt: now(),
     updatedAt: now(),
-  },
+  }),
 ]

@@ -1,22 +1,24 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { caseSalePrice, type PackType } from '../types'
 import { formatMoney, formatTime, useAppStore } from '../store/useStore'
 import { normalizeScanCode } from '../utils/scanCode'
 
 export function Inventory() {
-  const { products, stockLogs, adjustStock, lowStockProducts, findByBarcode } =
+  const { products, stockLogs, adjustStock, lowStockProducts, findByScan } =
     useAppStore()
   const [productId, setProductId] = useState(products[0]?.id ?? '')
   const [qty, setQty] = useState('1')
   const [type, setType] = useState<'in' | 'out' | 'adjust'>('in')
+  const [packMode, setPackMode] = useState<PackType>('case')
   const [note, setNote] = useState('')
   const [filter, setFilter] = useState('')
   const [scan, setScan] = useState('')
   const [scanMsg, setScanMsg] = useState<string | null>(null)
-  /** 扫码后立即按数量确认出入库 */
   const [quickScan, setQuickScan] = useState(true)
   const scanRef = useRef<HTMLInputElement>(null)
 
   const selected = products.find((p) => p.id === productId)
+  const units = Math.max(1, selected?.unitsPerCase || 1)
 
   useEffect(() => {
     scanRef.current?.focus()
@@ -38,27 +40,59 @@ export function Inventory() {
     window.setTimeout(() => scanRef.current?.focus(), 30)
   }
 
-  function applyStock(targetId: string, amount: number, tipNote?: string) {
+  function toBaseQty(amount: number, pack: PackType) {
+    if (pack === 'case') return amount * Math.max(1, selected?.unitsPerCase || 1)
+    return amount
+  }
+
+  function applyStock(
+    targetId: string,
+    packAmount: number,
+    pack: PackType,
+    tipNote?: string,
+  ) {
     const product = products.find((p) => p.id === targetId)
     if (!product) return false
+    const perCase = Math.max(1, product.unitsPerCase || 1)
+    const baseQty =
+      pack === 'case' ? packAmount * perCase : packAmount
 
     if (type === 'in') {
-      adjustStock(targetId, amount, 'in', tipNote || note || '扫码入库')
-      setScanMsg(`已入库 ${product.name} ×${amount}`)
+      const label =
+        pack === 'case'
+          ? `扫码入库 ${packAmount}箱(= ${baseQty}${product.unit})`
+          : `扫码入库 ${baseQty}${product.unit}`
+      adjustStock(targetId, baseQty, 'in', tipNote || note || label)
+      setScanMsg(
+        pack === 'case'
+          ? `已入库 ${product.name} ${packAmount}箱 → +${baseQty}${product.unit}`
+          : `已入库 ${product.name} +${baseQty}${product.unit}`,
+      )
       return true
     }
+
     if (type === 'out') {
-      if (amount > product.stock) {
-        setScanMsg(`${product.name} 库存不足（剩 ${product.stock}）`)
+      if (baseQty > product.stock) {
+        setScanMsg(`${product.name} 库存不足（剩 ${product.stock}${product.unit}）`)
         return false
       }
-      adjustStock(targetId, -amount, 'out', tipNote || note || '扫码出库')
-      setScanMsg(`已出库 ${product.name} ×${amount}`)
+      const label =
+        pack === 'case'
+          ? `扫码出库 ${packAmount}箱(= ${baseQty}${product.unit})`
+          : `扫码出库 ${baseQty}${product.unit}`
+      adjustStock(targetId, -baseQty, 'out', tipNote || note || label)
+      setScanMsg(
+        pack === 'case'
+          ? `已出库 ${product.name} ${packAmount}箱 → -${baseQty}${product.unit}`
+          : `已出库 ${product.name} -${baseQty}${product.unit}`,
+      )
       return true
     }
-    const delta = amount - product.stock
+
+    // adjust: amount is always base units target stock
+    const delta = packAmount - product.stock
     adjustStock(targetId, delta, 'adjust', tipNote || note || '扫码盘点')
-    setScanMsg(`已盘点 ${product.name} → ${amount}`)
+    setScanMsg(`已盘点 ${product.name} → ${packAmount}${product.unit}`)
     return true
   }
 
@@ -67,20 +101,37 @@ export function Inventory() {
     setScan('')
     if (!code) return
 
-    const product = findByBarcode(code)
-    if (!product) {
-      setScanMsg(`未找到条码/二维码：${code}（请先在商品管理中建档）`)
+    const hit = findByScan(code)
+    if (!hit) {
+      setScanMsg(`未找到条码/箱码：${code}（请先在商品管理建档）`)
       focusScan()
       return
     }
 
+    const { product, pack } = hit
     setProductId(product.id)
+    setPackMode(pack)
     const amount = Number(qty) || 1
 
     if (quickScan && type !== 'adjust') {
-      applyStock(product.id, amount, type === 'in' ? '扫码入库' : '扫码出库')
+      applyStock(
+        product.id,
+        amount,
+        pack,
+        pack === 'case'
+          ? type === 'in'
+            ? '扫箱码入库'
+            : '扫箱码出库'
+          : type === 'in'
+            ? '扫瓶码入库'
+            : '扫瓶码出库',
+      )
     } else {
-      setScanMsg(`已选中 ${product.name}，请确认数量后提交`)
+      setScanMsg(
+        pack === 'case'
+          ? `识别为【箱码】${product.name}（1箱=${product.unitsPerCase}${product.unit}）`
+          : `识别为【瓶/零售码】${product.name}，单价 ${formatMoney(product.price)}`,
+      )
     }
     focusScan()
   }
@@ -91,7 +142,8 @@ export function Inventory() {
     const n = Number(qty)
     if (!n || n <= 0) return
 
-    const ok = applyStock(productId, n)
+    const pack = type === 'adjust' ? 'unit' : packMode
+    const ok = applyStock(productId, n, pack)
     if (!ok) return
     setNote('')
     if (type === 'adjust') setQty(String(selected.stock))
@@ -99,6 +151,10 @@ export function Inventory() {
   }
 
   const typeLabel = { in: '入库', out: '出库', adjust: '盘点', sale: '销售' }
+  const previewBase =
+    type === 'adjust'
+      ? Number(qty) || 0
+      : toBaseQty(Number(qty) || 0, packMode)
 
   return (
     <div className="page">
@@ -112,7 +168,7 @@ export function Inventory() {
             <input
               ref={scanRef}
               className="scan-input"
-              placeholder="扫描外包装二维码/条码，回车识别"
+              placeholder="扫箱码按箱入库 / 扫瓶码按瓶入库"
               value={scan}
               onChange={(e) => setScan(e.target.value)}
               onKeyDown={(e) => {
@@ -133,7 +189,7 @@ export function Inventory() {
               checked={quickScan}
               onChange={(e) => setQuickScan(e.target.checked)}
             />
-            <span>扫码后立即按下方数量完成入库/出库（盘点除外）</span>
+            <span>扫码后立即按数量完成入库/出库（盘点除外）</span>
           </label>
 
           {scanMsg && <div className="toast warn">{scanMsg}</div>}
@@ -147,21 +203,50 @@ export function Inventory() {
               >
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} · {p.barcode}（库存 {p.stock}）
+                    {p.name} · 瓶码{p.barcode}
+                    {p.caseBarcode ? ` / 箱码${p.caseBarcode}` : ''}（库存{' '}
+                    {p.stock}
+                    {p.unit}）
                   </option>
                 ))}
               </select>
             </label>
 
             {selected && (
-              <p className="muted">
-                条码 <strong className="mono">{selected.barcode}</strong>
-                ，当前库存{' '}
-                <strong>
-                  {selected.stock} {selected.unit}
-                </strong>
-                ，成本约 {formatMoney(selected.cost * selected.stock)}
-              </p>
+              <div className="pack-hint">
+                <p>
+                  库存按<strong>{selected.unit}</strong>计：当前{' '}
+                  <strong>
+                    {selected.stock} {selected.unit}
+                  </strong>
+                  {selected.unitsPerCase > 1 && (
+                    <>
+                      {' '}
+                      ≈ {(selected.stock / selected.unitsPerCase).toFixed(1)} 箱
+                    </>
+                  )}
+                </p>
+                <p className="muted">
+                  瓶/零售码 <span className="mono">{selected.barcode}</span>
+                  {selected.caseBarcode ? (
+                    <>
+                      {' '}
+                      · 箱码{' '}
+                      <span className="mono">{selected.caseBarcode}</span> · 箱规{' '}
+                      {selected.unitsPerCase}
+                      {selected.unit}/箱
+                    </>
+                  ) : (
+                    ' · 未设置箱码'
+                  )}
+                </p>
+                <p className="muted">
+                  瓶价 {formatMoney(selected.price)}
+                  {selected.unitsPerCase > 1 && (
+                    <> · 箱价 {formatMoney(caseSalePrice(selected))}</>
+                  )}
+                </p>
+              </div>
             )}
 
             <label>
@@ -189,8 +274,34 @@ export function Inventory() {
               </div>
             </label>
 
+            {type !== 'adjust' && (
+              <label>
+                计量方式
+                <div className="pay-tabs">
+                  <button
+                    type="button"
+                    className={`pay-tab${packMode === 'case' ? ' active' : ''}`}
+                    onClick={() => setPackMode('case')}
+                  >
+                    按箱（×{units}）
+                  </button>
+                  <button
+                    type="button"
+                    className={`pay-tab${packMode === 'unit' ? ' active' : ''}`}
+                    onClick={() => setPackMode('unit')}
+                  >
+                    按{selected?.unit || '瓶'}
+                  </button>
+                </div>
+              </label>
+            )}
+
             <label>
-              {type === 'adjust' ? '盘点后数量' : '每次扫码数量'}
+              {type === 'adjust'
+                ? `盘点后库存（${selected?.unit || '瓶'}）`
+                : packMode === 'case'
+                  ? '箱数'
+                  : `数量（${selected?.unit || '瓶'}）`}
               <input
                 type="number"
                 min="1"
@@ -200,6 +311,15 @@ export function Inventory() {
                 required
               />
             </label>
+
+            {type !== 'adjust' && selected && (
+              <p className="muted">
+                将{type === 'in' ? '增加' : '减少'}库存{' '}
+                <strong>
+                  {previewBase} {selected.unit}
+                </strong>
+              </p>
+            )}
 
             <label>
               备注
@@ -227,6 +347,7 @@ export function Inventory() {
                       onClick={() => {
                         setProductId(p.id)
                         setType('in')
+                        setPackMode(p.caseBarcode ? 'case' : 'unit')
                         focusScan()
                       }}
                     >
@@ -234,6 +355,7 @@ export function Inventory() {
                     </button>
                     <span>
                       {p.stock}/{p.minStock}
+                      {p.unit}
                     </span>
                   </li>
                 ))}
