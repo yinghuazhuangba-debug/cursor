@@ -1,4 +1,10 @@
-import { useCallback, useMemo, useSyncExternalStore } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { SEED_PRODUCTS } from '../data/seed'
 import type {
   AppState,
@@ -10,7 +16,23 @@ import type {
 
 const STORAGE_KEY = 'xianlin-supermarket-v1'
 
-function loadState(): AppState {
+declare global {
+  interface Window {
+    desktopLedger?: {
+      isDesktop: true
+      getPath: () => Promise<string>
+      load: () => Promise<AppState>
+      save: (state: AppState) => Promise<boolean>
+      reveal: () => Promise<string>
+    }
+  }
+}
+
+function isDesktop() {
+  return typeof window !== 'undefined' && !!window.desktopLedger
+}
+
+function loadLocalState(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
@@ -23,16 +45,28 @@ function loadState(): AppState {
   return { products: SEED_PRODUCTS, sales: [], stockLogs: [] }
 }
 
-let state: AppState = loadState()
+let state: AppState = { products: [], sales: [], stockLogs: [] }
+let ready = false
+let dbPath = ''
 const listeners = new Set<() => void>()
 
 function emit() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   listeners.forEach((l) => l())
+}
+
+function persist(next: AppState) {
+  if (isDesktop() && window.desktopLedger) {
+    void window.desktopLedger.save(next).catch((err) => {
+      console.error('保存 ledger.db 失败', err)
+    })
+  } else {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  }
 }
 
 function setState(next: AppState | ((prev: AppState) => AppState)) {
   state = typeof next === 'function' ? next(state) : next
+  if (ready) persist(state)
   emit()
 }
 
@@ -53,8 +87,35 @@ function now() {
   return new Date().toISOString()
 }
 
+let bootPromise: Promise<void> | null = null
+
+export function bootStore() {
+  if (bootPromise) return bootPromise
+  bootPromise = (async () => {
+    if (isDesktop() && window.desktopLedger) {
+      dbPath = await window.desktopLedger.getPath()
+      state = await window.desktopLedger.load()
+    } else {
+      state = loadLocalState()
+      dbPath = ''
+    }
+    ready = true
+    emit()
+  })()
+  return bootPromise
+}
+
 export function useAppStore() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const [hydrated, setHydrated] = useState(ready)
+  const [path, setPath] = useState(dbPath)
+
+  useEffect(() => {
+    void bootStore().then(() => {
+      setHydrated(true)
+      setPath(dbPath)
+    })
+  }, [])
 
   const addProduct = useCallback(
     (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -202,6 +263,13 @@ export function useAppStore() {
     setState({ products: SEED_PRODUCTS, sales: [], stockLogs: [] })
   }, [])
 
+  const revealDatabase = useCallback(async () => {
+    if (window.desktopLedger) {
+      return window.desktopLedger.reveal()
+    }
+    return ''
+  }, [])
+
   const findByBarcode = useCallback(
     (barcode: string) =>
       snapshot.products.find((p) => p.barcode === barcode.trim()),
@@ -215,12 +283,16 @@ export function useAppStore() {
 
   return {
     ...snapshot,
+    hydrated,
+    dbPath: path,
+    isDesktop: isDesktop(),
     addProduct,
     updateProduct,
     deleteProduct,
     adjustStock,
     checkout,
     resetData,
+    revealDatabase,
     findByBarcode,
     lowStockProducts,
   }

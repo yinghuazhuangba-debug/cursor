@@ -1,6 +1,13 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  closeDatabase,
+  getDbPath,
+  initDatabase,
+  loadState,
+  saveState,
+} from './db.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
@@ -18,16 +25,15 @@ function createWindow() {
     backgroundColor: '#eef4ef',
     autoHideMenuBar: true,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
     },
   })
 
   if (isDev) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173')
-    mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
@@ -42,7 +48,23 @@ function createWindow() {
   })
 }
 
-app.whenReady().then(() => {
+function registerIpc() {
+  ipcMain.handle('ledger:getPath', () => getDbPath())
+  ipcMain.handle('ledger:load', () => loadState())
+  ipcMain.handle('ledger:save', (_event, state) => {
+    saveState(state)
+    return true
+  })
+  ipcMain.handle('ledger:reveal', async () => {
+    const file = getDbPath()
+    if (file) shell.showItemInFolder(file)
+    return file
+  })
+}
+
+app.whenReady().then(async () => {
+  await initDatabase()
+  registerIpc()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -50,5 +72,10 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  closeDatabase()
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  closeDatabase()
 })

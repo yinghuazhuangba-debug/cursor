@@ -6,7 +6,14 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onGoPos, onGoInventory }: DashboardProps) {
-  const { products, sales, lowStockProducts } = useAppStore()
+  const {
+    products,
+    sales,
+    lowStockProducts,
+    isDesktop,
+    dbPath,
+    revealDatabase,
+  } = useAppStore()
   const { revenue, count, itemsSold, todaySales } = useTodayStats(sales)
 
   const totalStockValue = products.reduce(
@@ -46,6 +53,22 @@ export function Dashboard({ onGoPos, onGoInventory }: DashboardProps) {
           </button>
         </div>
       </section>
+
+      {isDesktop && dbPath && (
+        <section className="db-banner">
+          <div>
+            <strong>本地数据库</strong>
+            <p className="mono muted">{dbPath}</p>
+          </div>
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => void revealDatabase()}
+          >
+            打开所在文件夹
+          </button>
+        </section>
+      )}
 
       <section className="stat-grid">
         <article className="stat">

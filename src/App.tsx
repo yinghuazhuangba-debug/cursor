@@ -10,7 +10,18 @@ import './App.css'
 
 function App() {
   const [page, setPage] = useState<PageId>('dashboard')
-  const { resetData } = useAppStore()
+  const { resetData, hydrated } = useAppStore()
+
+  if (!hydrated) {
+    return (
+      <div className="boot-screen">
+        <div className="boot-card">
+          <strong>鲜邻超市</strong>
+          <p>正在加载本地账本…</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <Layout page={page} onNavigate={setPage}>

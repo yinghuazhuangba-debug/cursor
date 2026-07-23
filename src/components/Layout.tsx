@@ -51,7 +51,7 @@ export function Layout({ page, onNavigate, children }: LayoutProps) {
         </nav>
 
         <div className="sidebar-foot">
-          <p>本地存储 · 数据仅保存在本机</p>
+          <p>桌面版数据写入本地 ledger.db</p>
         </div>
       </aside>
 
