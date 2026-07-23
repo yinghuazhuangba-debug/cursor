@@ -433,16 +433,28 @@ export function useAppStore() {
       const trimmed = raw.trim()
       if (!code && !trimmed) return null
 
-      const byCase = snapshot.products.find(
-        (p) =>
-          p.caseBarcode &&
-          (p.caseBarcode === code || p.caseBarcode === trimmed),
-      )
+      // 箱码优先：命中则按箱出售
+      const byCase = snapshot.products.find((p) => {
+        if (!p.caseBarcode) return false
+        const caseCode = normalizeScanCode(p.caseBarcode) || p.caseBarcode.trim()
+        return (
+          caseCode === code ||
+          caseCode === trimmed ||
+          p.caseBarcode === code ||
+          p.caseBarcode === trimmed
+        )
+      })
       if (byCase) return { product: byCase, pack: 'case' }
 
-      const byUnit = snapshot.products.find(
-        (p) => p.barcode === code || p.barcode === trimmed,
-      )
+      const byUnit = snapshot.products.find((p) => {
+        const unitCode = normalizeScanCode(p.barcode) || p.barcode.trim()
+        return (
+          unitCode === code ||
+          unitCode === trimmed ||
+          p.barcode === code ||
+          p.barcode === trimmed
+        )
+      })
       if (byUnit) return { product: byUnit, pack: 'unit' }
 
       return null

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CartItem, Sale } from '../types'
-import { caseSalePrice, PAYMENT_LABELS } from '../types'
+import { registeredCasePrice, PAYMENT_LABELS } from '../types'
 import { formatMoney, useAppStore } from '../store/useStore'
 import { normalizeScanCode } from '../utils/scanCode'
 
@@ -93,13 +93,23 @@ export function POS() {
     )
   }
 
-  /** 按整箱加入购物车 */
+  /** 按整箱加入购物车：必须使用建档箱价 */
   function addCase(productId: string, cases = 1) {
     const product = products.find((p) => p.id === productId)
     if (!product) return
+    if (!product.caseBarcode) {
+      setMessage(`${product.name} 未设置箱码，无法按箱出售`)
+      return
+    }
+    const price = registeredCasePrice(product)
+    if (price == null) {
+      setMessage(
+        `${product.name} 未录入整箱售价，请先在商品管理填写「整箱售价」`,
+      )
+      return
+    }
     const perCase = Math.max(1, product.unitsPerCase || 1)
     const stockNeed = cases * perCase
-    const price = caseSalePrice(product)
     addCartItem(
       {
         productId: product.id,
@@ -111,7 +121,7 @@ export function POS() {
       stockNeed,
     )
     flashPrice(
-      `${product.name} 整箱 ${formatMoney(price)}（${perCase}${product.unit}，瓶价 ${formatMoney(product.price)}）`,
+      `按箱出售 · ${product.name} 箱价 ${formatMoney(price)}（含${perCase}${product.unit}）`,
     )
   }
 
@@ -122,8 +132,12 @@ export function POS() {
 
     const hit = findByScan(raw)
     if (hit) {
-      if (hit.pack === 'case') addCase(hit.product.id, 1)
-      else addUnit(hit.product.id, 1)
+      if (hit.pack === 'case') {
+        // 输入/扫描箱码 → 强制按箱、按建档箱价出售
+        addCase(hit.product.id, 1)
+      } else {
+        addUnit(hit.product.id, 1)
+      }
       return
     }
 
@@ -227,7 +241,7 @@ export function POS() {
             <input
               ref={inputRef}
               className="scan-input"
-              placeholder="扫瓶码按瓶卖 / 扫箱码按箱卖，回车加入"
+              placeholder="扫瓶码按瓶卖（瓶价）；输入/扫箱码按箱卖（建档箱价）"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -282,7 +296,7 @@ export function POS() {
                 {cart.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="empty-cell">
-                      扫瓶码显示单价并加入；扫箱码按整箱价加入
+                      扫瓶码：按瓶价加入；扫/输入箱码：按建档箱价整箱加入
                     </td>
                   </tr>
                 ) : (
@@ -383,7 +397,10 @@ export function POS() {
                   </span>
                   {p.unitsPerCase > 1 && (
                     <span className="chip-case">
-                      箱 {formatMoney(caseSalePrice(p))} · {p.unitsPerCase}
+                      {registeredCasePrice(p) != null
+                        ? `箱价 ${formatMoney(registeredCasePrice(p)!)}`
+                        : '未设箱价'}{' '}
+                      · {p.unitsPerCase}
                       {p.unit}/箱
                     </span>
                   )}

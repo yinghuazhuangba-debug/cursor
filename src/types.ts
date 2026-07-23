@@ -102,6 +102,11 @@ export function caseSalePrice(p: Product): number {
   return +(p.price * Math.max(1, p.unitsPerCase || 1)).toFixed(2)
 }
 
+/** 整箱售价：仅返回商品建档时录入的箱价；未录入则 null */
+export function registeredCasePrice(p: Product): number | null {
+  return p.casePrice > 0 ? p.casePrice : null
+}
+
 export function normalizeProduct(p: Partial<Product> & Pick<Product, 'id' | 'barcode' | 'name'>): Product {
   const now = new Date().toISOString()
   return {

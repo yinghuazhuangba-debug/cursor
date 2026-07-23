@@ -117,6 +117,17 @@ export function Products() {
       minStock: Number(form.minStock) || 0,
     }
     if (!payload.barcode || !payload.name) return
+    if (payload.caseBarcode && !payload.casePrice) {
+      alert('已填写箱码时，请同时填写「整箱售价」，扫箱码将按该箱价出售')
+      return
+    }
+    if (
+      payload.caseBarcode &&
+      payload.caseBarcode === payload.barcode
+    ) {
+      alert('箱码不能与瓶码相同，否则无法区分按瓶/按箱出售')
+      return
+    }
 
     if (editing) {
       updateProduct(editing.id, payload)
@@ -345,12 +356,12 @@ export function Products() {
                   />
                 </label>
                 <label>
-                  整箱售价（可空）
+                  整箱售价（有箱码必填）
                   <input
                     type="number"
                     step="0.01"
                     min="0"
-                    placeholder="空则=单价×箱规"
+                    placeholder="扫箱码时按此价整箱出售"
                     value={form.casePrice}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, casePrice: e.target.value }))
