@@ -1,0 +1,61 @@
+:root {
+  --bg: #f3f6f2;
+  --bg-deep: #e6eee8;
+  --surface: #ffffff;
+  --ink: #15241c;
+  --muted: #5a6f63;
+  --line: #d5e0d8;
+  --brand: #1b5e4a;
+  --brand-soft: #e8f3ee;
+  --brand-mid: #2a7a60;
+  --accent: #d4a012;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --warn: #b54708;
+  --warn-soft: #fff4e5;
+  --shadow: 0 12px 40px rgba(21, 36, 28, 0.08);
+  --radius: 16px;
+  --font-display: 'Outfit', 'Noto Sans SC', sans-serif;
+  --font-body: 'Noto Sans SC', 'Outfit', sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  font-family: var(--font-body);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+  background:
+    radial-gradient(ellipse 80% 50% at 0% 0%, rgba(42, 122, 96, 0.12), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 10%, rgba(212, 160, 18, 0.1), transparent 50%),
+    linear-gradient(180deg, #eef4ef 0%, var(--bg) 40%, #e9f0eb 100%);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+}
