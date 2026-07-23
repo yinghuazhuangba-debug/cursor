@@ -193,8 +193,10 @@ export function Products() {
     )
   }
 
-  /** 扫/输入编码或箱码后，按历史商品自动带出资料与单价 */
+  /** 仅新建时：扫/输入编码或箱码后自动带出历史；编辑中可自由改编码，不再回填冲掉 */
   function applyHistoryByCode(raw: string) {
+    if (editing) return
+
     const code = normalizeScanCode(raw) || raw.trim()
     if (!code) return
 
@@ -212,14 +214,10 @@ export function Products() {
     })
 
     if (!hit) {
-      if (historyProduct && !editing) {
+      if (historyProduct) {
         setHistoryProduct(null)
         setHistoryHint(null)
       }
-      return
-    }
-
-    if (editing?.id === hit.id && historyProduct?.id === hit.id) {
       return
     }
 
@@ -272,7 +270,28 @@ export function Products() {
       return
     }
 
-      if (editing) {
+    const codeTaken = products.some((p) => {
+      if (editing && p.id === editing.id) return false
+      const unit = normalizeScanCode(p.barcode) || p.barcode.trim()
+      const caseCode = p.caseBarcode
+        ? normalizeScanCode(p.caseBarcode) || p.caseBarcode.trim()
+        : ''
+      return (
+        unit === payload.barcode ||
+        p.barcode === payload.barcode ||
+        (payload.caseBarcode &&
+          (caseCode === payload.caseBarcode ||
+            p.caseBarcode === payload.caseBarcode)) ||
+        (caseCode && caseCode === payload.barcode) ||
+        (payload.caseBarcode && unit === payload.caseBarcode)
+      )
+    })
+    if (codeTaken) {
+      alert('编码或箱码与其他商品重复，请换一个')
+      return
+    }
+
+    if (editing) {
       updateProduct(editing.id, {
         barcode: payload.barcode,
         caseBarcode: payload.caseBarcode,
@@ -518,39 +537,50 @@ export function Products() {
                     type="text"
                     autoComplete="off"
                     required
-                    placeholder="如 NS550、水01，方便记忆"
+                    placeholder="如 NS550、水01，方便记忆；编辑时可直接修改"
                     value={form.barcode}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, barcode: e.target.value }))
                     }
-                    onBlur={() => applyHistoryByCode(form.barcode)}
+                    onBlur={() => {
+                      if (!editing) applyHistoryByCode(form.barcode)
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault()
-                        applyHistoryByCode(form.barcode)
+                        if (!editing) applyHistoryByCode(form.barcode)
                       }
                     }}
                   />
+                  {editing && (
+                    <small className="field-hint">编辑时可修改编码，保存后生效</small>
+                  )}
                 </label>
                 <label>
                   箱码（可选）
                   <input
                     type="text"
                     autoComplete="off"
-                    placeholder="扫箱码回车也可带出历史"
+                    placeholder={
+                      editing
+                        ? '可修改箱码'
+                        : '扫箱码回车也可带出历史'
+                    }
                     value={form.caseBarcode}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, caseBarcode: e.target.value }))
                     }
                     onBlur={() => {
-                      if (form.caseBarcode.trim()) {
+                      if (!editing && form.caseBarcode.trim()) {
                         applyHistoryByCode(form.caseBarcode)
                       }
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault()
-                        applyHistoryByCode(form.caseBarcode)
+                        if (!editing && form.caseBarcode.trim()) {
+                          applyHistoryByCode(form.caseBarcode)
+                        }
                       }
                     }}
                   />
@@ -712,8 +742,8 @@ export function Products() {
                 </label>
               </div>
               <p className="muted" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
-                建议：名称与编码固定下来，编码可自定且每种商品唯一。补货请用上方下拉选已有商品，只填本次补货数量。
-                箱码可选；有箱码须填整箱售价。库存按最小单位计数。
+                建议：名称与编码尽量固定；编码可自定且每种商品唯一，编辑时也可修改。
+                补货请用上方下拉选已有商品，只填本次补货数量。有箱码须填整箱售价。库存按最小单位计数。
               </p>
               </div>
               <div className="modal-actions">
