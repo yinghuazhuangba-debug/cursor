@@ -37,6 +37,13 @@ export function Products() {
   const [form, setForm] = useState(emptyForm)
   const [newCat, setNewCat] = useState('')
   const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({})
+  /** 单价是否被手动改过；未改则保存时用历史单价 */
+  const [priceDirty, setPriceDirty] = useState(false)
+  const [casePriceDirty, setCasePriceDirty] = useState(false)
+  const [costDirty, setCostDirty] = useState(false)
+  const [historyHint, setHistoryHint] = useState<string | null>(null)
+  /** 条码带出的历史商品快照（用于未改价时回填） */
+  const [historyProduct, setHistoryProduct] = useState<Product | null>(null)
   const firstInputRef = useRef<HTMLInputElement>(null)
 
   const filtered = useMemo(() => {
@@ -66,8 +73,29 @@ export function Products() {
     setRenameDrafts(drafts)
   }, [showCats, categories])
 
+  function productToForm(p: Product) {
+    return {
+      barcode: p.barcode,
+      caseBarcode: p.caseBarcode || '',
+      unitsPerCase: String(p.unitsPerCase || 1),
+      name: p.name,
+      category: p.category,
+      price: String(p.price),
+      cost: String(p.cost),
+      casePrice: p.casePrice > 0 ? String(p.casePrice) : '',
+      stock: String(p.stock),
+      unit: p.unit,
+      minStock: String(p.minStock),
+    }
+  }
+
   function openCreate() {
     setEditing(null)
+    setHistoryProduct(null)
+    setHistoryHint(null)
+    setPriceDirty(false)
+    setCasePriceDirty(false)
+    setCostDirty(false)
     setForm({
       ...emptyForm,
       category: categories.includes('其他')
@@ -79,29 +107,83 @@ export function Products() {
 
   function openEdit(p: Product) {
     setEditing(p)
-    setForm({
-      barcode: p.barcode,
-      caseBarcode: p.caseBarcode || '',
-      unitsPerCase: String(p.unitsPerCase || 1),
-      name: p.name,
-      category: p.category,
-      price: String(p.price),
-      cost: String(p.cost),
-      casePrice: String(p.casePrice || ''),
-      stock: String(p.stock),
-      unit: p.unit,
-      minStock: String(p.minStock),
-    })
+    setHistoryProduct(p)
+    setHistoryHint(
+      `已带出历史单价：瓶价 ${formatMoney(p.price)}${
+        p.casePrice > 0 ? `，箱价 ${formatMoney(p.casePrice)}` : ''
+      }。可修改；不改则按历史价保存。`,
+    )
+    setPriceDirty(false)
+    setCasePriceDirty(false)
+    setCostDirty(false)
+    setForm(productToForm(p))
     setShowForm(true)
   }
 
   function closeForm() {
     setShowForm(false)
     setEditing(null)
+    setHistoryProduct(null)
+    setHistoryHint(null)
+    setPriceDirty(false)
+    setCasePriceDirty(false)
+    setCostDirty(false)
+  }
+
+  /** 扫/输入瓶码或箱码后，按历史商品自动带出资料与单价 */
+  function applyHistoryByCode(raw: string) {
+    const code = normalizeScanCode(raw) || raw.trim()
+    if (!code) return
+
+    const hit = products.find((p) => {
+      const unit = normalizeScanCode(p.barcode) || p.barcode.trim()
+      const caseCode = p.caseBarcode
+        ? normalizeScanCode(p.caseBarcode) || p.caseBarcode.trim()
+        : ''
+      return unit === code || caseCode === code || p.barcode === code || p.caseBarcode === code
+    })
+
+    if (!hit) {
+      // 新码：不覆盖用户已填内容，仅清除历史绑定
+      if (historyProduct && !editing) {
+        setHistoryProduct(null)
+        setHistoryHint(null)
+      }
+      return
+    }
+
+    // 已是当前编辑对象且条码未变，不重复覆盖（避免打字时冲掉用户修改）
+    if (editing?.id === hit.id && historyProduct?.id === hit.id) {
+      return
+    }
+
+    setEditing(hit)
+    setHistoryProduct(hit)
+    setPriceDirty(false)
+    setCasePriceDirty(false)
+    setCostDirty(false)
+    setForm(productToForm(hit))
+    setHistoryHint(
+      `已识别历史商品「${hit.name}」，已带出历史单价（瓶价 ${formatMoney(hit.price)}${
+        hit.casePrice > 0 ? ` / 箱价 ${formatMoney(hit.casePrice)}` : ''
+      }）。可修改；不改则按历史价保存。`,
+    )
   }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    const hist = historyProduct || editing
+
+    const price = !priceDirty && hist
+      ? hist.price
+      : Number(form.price) || 0
+    const cost = !costDirty && hist
+      ? hist.cost
+      : Number(form.cost) || 0
+    const casePrice = !casePriceDirty && hist
+      ? hist.casePrice || 0
+      : Number(form.casePrice) || 0
+
     const payload = {
       barcode: normalizeScanCode(form.barcode) || form.barcode.trim(),
       caseBarcode:
@@ -109,9 +191,9 @@ export function Products() {
       unitsPerCase: Math.max(1, Number(form.unitsPerCase) || 1),
       name: form.name.trim(),
       category: form.category,
-      price: Number(form.price) || 0,
-      cost: Number(form.cost) || 0,
-      casePrice: Number(form.casePrice) || 0,
+      price,
+      cost,
+      casePrice,
       stock: Number(form.stock) || 0,
       unit: form.unit.trim() || '瓶',
       minStock: Number(form.minStock) || 0,
@@ -261,6 +343,11 @@ export function Products() {
               <h2 id="product-form-title">
                 {editing ? '编辑商品' : '新增商品'}
               </h2>
+              {historyHint && (
+                <div className="toast warn" style={{ marginBottom: '0.85rem' }}>
+                  {historyHint}
+                </div>
+              )}
               <div className="form-grid">
                 <label>
                   瓶码 / 零售码
@@ -269,11 +356,18 @@ export function Products() {
                     type="text"
                     autoComplete="off"
                     required
-                    placeholder="扫瓶身码"
+                    placeholder="扫码后回车，自动带出历史单价"
                     value={form.barcode}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, barcode: e.target.value }))
                     }
+                    onBlur={() => applyHistoryByCode(form.barcode)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        applyHistoryByCode(form.barcode)
+                      }
+                    }}
                   />
                 </label>
                 <label>
@@ -281,11 +375,22 @@ export function Products() {
                   <input
                     type="text"
                     autoComplete="off"
-                    placeholder="扫外箱码"
+                    placeholder="扫箱码回车也可带出历史"
                     value={form.caseBarcode}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, caseBarcode: e.target.value }))
                     }
+                    onBlur={() => {
+                      if (form.caseBarcode.trim()) {
+                        applyHistoryByCode(form.caseBarcode)
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        applyHistoryByCode(form.caseBarcode)
+                      }
+                    }}
                   />
                 </label>
                 <label>
@@ -350,10 +455,16 @@ export function Products() {
                     min="0"
                     required
                     value={form.price}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      setPriceDirty(true)
                       setForm((f) => ({ ...f, price: e.target.value }))
-                    }
+                    }}
                   />
+                  {!priceDirty && historyProduct && (
+                    <small className="field-hint">
+                      默认历史价 {formatMoney(historyProduct.price)}
+                    </small>
+                  )}
                 </label>
                 <label>
                   整箱售价（有箱码必填）
@@ -363,10 +474,18 @@ export function Products() {
                     min="0"
                     placeholder="扫箱码时按此价整箱出售"
                     value={form.casePrice}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      setCasePriceDirty(true)
                       setForm((f) => ({ ...f, casePrice: e.target.value }))
-                    }
+                    }}
                   />
+                  {!casePriceDirty &&
+                    historyProduct &&
+                    historyProduct.casePrice > 0 && (
+                      <small className="field-hint">
+                        默认历史箱价 {formatMoney(historyProduct.casePrice)}
+                      </small>
+                    )}
                 </label>
                 <label>
                   进价（按最小单位）
@@ -375,10 +494,16 @@ export function Products() {
                     step="0.01"
                     min="0"
                     value={form.cost}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      setCostDirty(true)
                       setForm((f) => ({ ...f, cost: e.target.value }))
-                    }
+                    }}
                   />
+                  {!costDirty && historyProduct && (
+                    <small className="field-hint">
+                      默认历史进价 {formatMoney(historyProduct.cost)}
+                    </small>
+                  )}
                 </label>
                 <label>
                   库存（按最小单位）
@@ -404,7 +529,7 @@ export function Products() {
                 </label>
               </div>
               <p className="muted" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
-                例：一箱矿泉水 24 瓶。瓶码用于零售扫码；箱码用于整箱入库。库存始终按「瓶」计数。
+                扫/输入已有瓶码或箱码并回车，自动带出历史单价；不改价则按历史单价保存。
               </p>
               <div className="modal-actions">
                 <button

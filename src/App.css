@@ -880,11 +880,13 @@
   font-size: 0.85rem;
 }
 
-.cat-add-row {
-  display: flex;
-  gap: 0.55rem;
-  margin-bottom: 0.85rem;
+.field-hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--brand-mid);
+  font-size: 0.75rem;
 }
+
 
 .cat-add-row input {
   flex: 1;
