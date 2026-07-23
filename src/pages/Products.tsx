@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import type { Category, Product } from '../types'
 import { CATEGORIES } from '../types'
 import { formatMoney, useAppStore } from '../store/useStore'
@@ -21,6 +22,7 @@ export function Products() {
   const [editing, setEditing] = useState<Product | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const firstInputRef = useRef<HTMLInputElement>(null)
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -34,6 +36,12 @@ export function Products() {
       return matchCat && matchQ
     })
   }, [products, search, category])
+
+  useEffect(() => {
+    if (!showForm) return
+    const t = window.setTimeout(() => firstInputRef.current?.focus(), 30)
+    return () => window.clearTimeout(t)
+  }, [showForm])
 
   function openCreate() {
     setEditing(null)
@@ -56,6 +64,11 @@ export function Products() {
     setShowForm(true)
   }
 
+  function closeForm() {
+    setShowForm(false)
+    setEditing(null)
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const payload = {
@@ -75,8 +88,7 @@ export function Products() {
     } else {
       addProduct(payload)
     }
-    setShowForm(false)
-    setEditing(null)
+    closeForm()
     setForm(emptyForm)
   }
 
@@ -167,125 +179,145 @@ export function Products() {
         </table>
       </div>
 
-      {showForm && (
-        <div className="modal-backdrop" onClick={() => setShowForm(false)}>
-          <form
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleSubmit}
+      {showForm &&
+        createPortal(
+          <div
+            className="modal-backdrop"
+            role="presentation"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) closeForm()
+            }}
           >
-            <h2>{editing ? '编辑商品' : '新增商品'}</h2>
-            <div className="form-grid">
-              <label>
-                条码
-                <input
-                  required
-                  value={form.barcode}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, barcode: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                名称
-                <input
-                  required
-                  value={form.name}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, name: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                分类
-                <select
-                  value={form.category}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      category: e.target.value as Category,
-                    }))
-                  }
+            <form
+              className="modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="product-form-title"
+              onMouseDown={(e) => e.stopPropagation()}
+              onSubmit={handleSubmit}
+            >
+              <h2 id="product-form-title">
+                {editing ? '编辑商品' : '新增商品'}
+              </h2>
+              <div className="form-grid">
+                <label>
+                  条码
+                  <input
+                    ref={firstInputRef}
+                    type="text"
+                    autoComplete="off"
+                    required
+                    value={form.barcode}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, barcode: e.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  名称
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    required
+                    value={form.name}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, name: e.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  分类
+                  <select
+                    value={form.category}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        category: e.target.value as Category,
+                      }))
+                    }
+                  >
+                    {CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  单位
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    value={form.unit}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, unit: e.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  售价
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={form.price}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, price: e.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  进价
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.cost}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, cost: e.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  库存
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.stock}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, stock: e.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  最低库存
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.minStock}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, minStock: e.target.value }))
+                    }
+                  />
+                </label>
+              </div>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={closeForm}
                 >
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                单位
-                <input
-                  value={form.unit}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, unit: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                售价
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  required
-                  value={form.price}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, price: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                进价
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.cost}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, cost: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                库存
-                <input
-                  type="number"
-                  min="0"
-                  value={form.stock}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, stock: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                最低库存
-                <input
-                  type="number"
-                  min="0"
-                  value={form.minStock}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, minStock: e.target.value }))
-                  }
-                />
-              </label>
-            </div>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn ghost"
-                onClick={() => setShowForm(false)}
-              >
-                取消
-              </button>
-              <button type="submit" className="btn primary">
-                保存
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+                  取消
+                </button>
+                <button type="submit" className="btn primary">
+                  保存
+                </button>
+              </div>
+            </form>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
