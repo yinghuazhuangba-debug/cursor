@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useAppStore, useTodayStats, formatMoney } from '../store/useStore'
 
 interface DashboardProps {
@@ -21,6 +22,7 @@ export function Dashboard({ onGoPos, onGoInventory }: DashboardProps) {
     resetDatabasePath,
   } = useAppStore()
   const { revenue, count, itemsSold, todaySales } = useTodayStats(sales)
+  const [dbOpen, setDbOpen] = useState(false)
   const [dbBusy, setDbBusy] = useState(false)
   const [dbMessage, setDbMessage] = useState<string | null>(null)
 
@@ -77,67 +79,6 @@ export function Dashboard({ onGoPos, onGoInventory }: DashboardProps) {
           </button>
         </div>
       </section>
-
-      {isDesktop && dbPath && (
-        <section className="db-banner">
-          <div>
-            <strong>本地数据库 {dbIsCustom ? '（自定义）' : '（默认）'}</strong>
-            <p className="mono muted">{dbPath}</p>
-            {dbIsCustom && (
-              <p className="muted db-default-hint">默认位置：{dbDefaultPath}</p>
-            )}
-            {dbMessage && <p className="db-feedback">{dbMessage}</p>}
-          </div>
-          <div className="db-actions">
-            <button
-              type="button"
-              className="btn ghost"
-              disabled={dbBusy}
-              onClick={() => void revealDatabase()}
-            >
-              打开文件夹
-            </button>
-            <button
-              type="button"
-              className="btn ghost"
-              disabled={dbBusy}
-              onClick={() =>
-                void runDbAction(
-                  chooseSaveDatabasePath,
-                  '已切换到新位置（已复制当前数据）',
-                )
-              }
-            >
-              另存到…
-            </button>
-            <button
-              type="button"
-              className="btn ghost"
-              disabled={dbBusy}
-              onClick={() =>
-                void runDbAction(
-                  chooseOpenDatabasePath,
-                  '已切换到所选数据库',
-                )
-              }
-            >
-              打开已有…
-            </button>
-            {dbIsCustom && (
-              <button
-                type="button"
-                className="btn ghost"
-                disabled={dbBusy}
-                onClick={() =>
-                  void runDbAction(resetDatabasePath, '已恢复默认位置')
-                }
-              >
-                恢复默认
-              </button>
-            )}
-          </div>
-        </section>
-      )}
 
       <section className="stat-grid">
         <article className="stat">
@@ -206,6 +147,117 @@ export function Dashboard({ onGoPos, onGoInventory }: DashboardProps) {
           )}
         </section>
       </div>
+
+      {isDesktop && (
+        <div className="db-entry">
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => {
+              setDbMessage(null)
+              setDbOpen(true)
+            }}
+          >
+            数据库设置
+          </button>
+        </div>
+      )}
+
+      {dbOpen &&
+        createPortal(
+          <div
+            className="modal-backdrop"
+            role="presentation"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setDbOpen(false)
+            }}
+          >
+            <div
+              className="modal db-settings-modal"
+              role="dialog"
+              aria-modal="true"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <h2>数据库设置</h2>
+              <p className="muted" style={{ marginTop: 0 }}>
+                配置本地 ledger.db 存储位置。路径不在首页展示，仅在此查看与修改。
+              </p>
+
+              <div className="db-path-block">
+                <span className="stat-label">
+                  当前{dbIsCustom ? '（自定义）' : '（默认）'}
+                </span>
+                <p className="mono">{dbPath || '—'}</p>
+              </div>
+              <div className="db-path-block">
+                <span className="stat-label">系统默认位置</span>
+                <p className="mono muted">{dbDefaultPath || '—'}</p>
+              </div>
+
+              {dbMessage && <p className="db-feedback">{dbMessage}</p>}
+
+              <div className="db-actions modal-db-actions">
+                <button
+                  type="button"
+                  className="btn ghost"
+                  disabled={dbBusy || !dbPath}
+                  onClick={() => void revealDatabase()}
+                >
+                  打开文件夹
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  disabled={dbBusy}
+                  onClick={() =>
+                    void runDbAction(
+                      chooseSaveDatabasePath,
+                      '已切换到新位置（已复制当前数据）',
+                    )
+                  }
+                >
+                  另存到…
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  disabled={dbBusy}
+                  onClick={() =>
+                    void runDbAction(
+                      chooseOpenDatabasePath,
+                      '已切换到所选数据库',
+                    )
+                  }
+                >
+                  打开已有…
+                </button>
+                {dbIsCustom && (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    disabled={dbBusy}
+                    onClick={() =>
+                      void runDbAction(resetDatabasePath, '已恢复默认位置')
+                    }
+                  >
+                    恢复默认
+                  </button>
+                )}
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => setDbOpen(false)}
+                >
+                  完成
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
