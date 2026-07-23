@@ -1,15 +1,30 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { formatMoney, formatTime, useAppStore } from '../store/useStore'
+import { normalizeScanCode } from '../utils/scanCode'
 
 export function Inventory() {
-  const { products, stockLogs, adjustStock, lowStockProducts } = useAppStore()
+  const { products, stockLogs, adjustStock, lowStockProducts, findByBarcode } =
+    useAppStore()
   const [productId, setProductId] = useState(products[0]?.id ?? '')
-  const [qty, setQty] = useState('10')
+  const [qty, setQty] = useState('1')
   const [type, setType] = useState<'in' | 'out' | 'adjust'>('in')
   const [note, setNote] = useState('')
   const [filter, setFilter] = useState('')
+  const [scan, setScan] = useState('')
+  const [scanMsg, setScanMsg] = useState<string | null>(null)
+  /** 扫码后立即按数量确认出入库 */
+  const [quickScan, setQuickScan] = useState(true)
+  const scanRef = useRef<HTMLInputElement>(null)
 
   const selected = products.find((p) => p.id === productId)
+
+  useEffect(() => {
+    scanRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    if (!productId && products[0]) setProductId(products[0].id)
+  }, [products, productId])
 
   const filteredLogs = useMemo(() => {
     const q = filter.trim()
@@ -19,26 +34,68 @@ export function Inventory() {
       .slice(0, 50)
   }, [stockLogs, filter])
 
+  function focusScan() {
+    window.setTimeout(() => scanRef.current?.focus(), 30)
+  }
+
+  function applyStock(targetId: string, amount: number, tipNote?: string) {
+    const product = products.find((p) => p.id === targetId)
+    if (!product) return false
+
+    if (type === 'in') {
+      adjustStock(targetId, amount, 'in', tipNote || note || '扫码入库')
+      setScanMsg(`已入库 ${product.name} ×${amount}`)
+      return true
+    }
+    if (type === 'out') {
+      if (amount > product.stock) {
+        setScanMsg(`${product.name} 库存不足（剩 ${product.stock}）`)
+        return false
+      }
+      adjustStock(targetId, -amount, 'out', tipNote || note || '扫码出库')
+      setScanMsg(`已出库 ${product.name} ×${amount}`)
+      return true
+    }
+    const delta = amount - product.stock
+    adjustStock(targetId, delta, 'adjust', tipNote || note || '扫码盘点')
+    setScanMsg(`已盘点 ${product.name} → ${amount}`)
+    return true
+  }
+
+  function handleScan() {
+    const code = normalizeScanCode(scan)
+    setScan('')
+    if (!code) return
+
+    const product = findByBarcode(code)
+    if (!product) {
+      setScanMsg(`未找到条码/二维码：${code}（请先在商品管理中建档）`)
+      focusScan()
+      return
+    }
+
+    setProductId(product.id)
+    const amount = Number(qty) || 1
+
+    if (quickScan && type !== 'adjust') {
+      applyStock(product.id, amount, type === 'in' ? '扫码入库' : '扫码出库')
+    } else {
+      setScanMsg(`已选中 ${product.name}，请确认数量后提交`)
+    }
+    focusScan()
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!productId || !selected) return
     const n = Number(qty)
     if (!n || n <= 0) return
 
-    if (type === 'in') {
-      adjustStock(productId, n, 'in', note || '进货入库')
-    } else if (type === 'out') {
-      if (n > selected.stock) {
-        alert('出库数量超过当前库存')
-        return
-      }
-      adjustStock(productId, -n, 'out', note || '出库')
-    } else {
-      const delta = n - selected.stock
-      adjustStock(productId, delta, 'adjust', note || '盘点调整')
-    }
+    const ok = applyStock(productId, n)
+    if (!ok) return
     setNote('')
-    setQty(type === 'adjust' ? String(selected.stock) : '10')
+    if (type === 'adjust') setQty(String(selected.stock))
+    focusScan()
   }
 
   const typeLabel = { in: '入库', out: '出库', adjust: '盘点', sale: '销售' }
@@ -50,6 +107,37 @@ export function Inventory() {
           <header className="panel-head">
             <h2>库存调整</h2>
           </header>
+
+          <div className="scan-bar inventory-scan">
+            <input
+              ref={scanRef}
+              className="scan-input"
+              placeholder="扫描外包装二维码/条码，回车识别"
+              value={scan}
+              onChange={(e) => setScan(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleScan()
+                }
+              }}
+            />
+            <button type="button" className="btn primary" onClick={handleScan}>
+              识别
+            </button>
+          </div>
+
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={quickScan}
+              onChange={(e) => setQuickScan(e.target.checked)}
+            />
+            <span>扫码后立即按下方数量完成入库/出库（盘点除外）</span>
+          </label>
+
+          {scanMsg && <div className="toast warn">{scanMsg}</div>}
+
           <form className="stack-form" onSubmit={handleSubmit}>
             <label>
               商品
@@ -59,7 +147,7 @@ export function Inventory() {
               >
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name}（库存 {p.stock}）
+                    {p.name} · {p.barcode}（库存 {p.stock}）
                   </option>
                 ))}
               </select>
@@ -67,7 +155,8 @@ export function Inventory() {
 
             {selected && (
               <p className="muted">
-                当前库存{' '}
+                条码 <strong className="mono">{selected.barcode}</strong>
+                ，当前库存{' '}
                 <strong>
                   {selected.stock} {selected.unit}
                 </strong>
@@ -89,7 +178,10 @@ export function Inventory() {
                     key={v}
                     type="button"
                     className={`pay-tab${type === v ? ' active' : ''}`}
-                    onClick={() => setType(v)}
+                    onClick={() => {
+                      setType(v)
+                      focusScan()
+                    }}
                   >
                     {label}
                   </button>
@@ -98,10 +190,10 @@ export function Inventory() {
             </label>
 
             <label>
-              {type === 'adjust' ? '盘点后数量' : '数量'}
+              {type === 'adjust' ? '盘点后数量' : '每次扫码数量'}
               <input
                 type="number"
-                min="0"
+                min="1"
                 step="1"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
@@ -135,6 +227,7 @@ export function Inventory() {
                       onClick={() => {
                         setProductId(p.id)
                         setType('in')
+                        focusScan()
                       }}
                     >
                       {p.name}

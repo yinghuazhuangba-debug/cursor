@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CartItem, Sale } from '../types'
 import { PAYMENT_LABELS } from '../types'
 import { formatMoney, useAppStore } from '../store/useStore'
+import { normalizeScanCode } from '../utils/scanCode'
 
 export function POS() {
   const { products, findByBarcode, checkout } = useAppStore()
@@ -62,20 +63,27 @@ export function POS() {
   }
 
   function handleScan() {
-    const q = query.trim()
+    const q = normalizeScanCode(query)
     if (!q) return
     const byBarcode = findByBarcode(q)
     if (byBarcode) {
       addProduct(byBarcode.id)
       return
     }
-    const byName = products.filter((p) => p.name.includes(q))
+    // 原始内容再试一次（兼容未规范化情况）
+    const raw = query.trim()
+    const byRaw = raw !== q ? findByBarcode(raw) : undefined
+    if (byRaw) {
+      addProduct(byRaw.id)
+      return
+    }
+    const byName = products.filter((p) => p.name.includes(raw) || p.name.includes(q))
     if (byName.length === 1) {
       addProduct(byName[0].id)
       return
     }
     if (byName.length === 0) {
-      setMessage('未找到商品，请检查条码或名称')
+      setMessage(`未找到商品：${q}`)
     }
   }
 
@@ -144,7 +152,7 @@ export function POS() {
             <input
               ref={inputRef}
               className="scan-input"
-              placeholder="扫码 / 输入条码或商品名，回车添加"
+              placeholder="扫描包装二维码/条码，或输入商品名后回车"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {

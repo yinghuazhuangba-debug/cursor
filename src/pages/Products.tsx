@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { Category, Product } from '../types'
 import { CATEGORIES } from '../types'
 import { formatMoney, useAppStore } from '../store/useStore'
+import { normalizeScanCode } from '../utils/scanCode'
 
 const emptyForm = {
   barcode: '',
@@ -72,7 +73,7 @@ export function Products() {
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const payload = {
-      barcode: form.barcode.trim(),
+      barcode: normalizeScanCode(form.barcode) || form.barcode.trim(),
       name: form.name.trim(),
       category: form.category,
       price: Number(form.price) || 0,
@@ -201,12 +202,13 @@ export function Products() {
               </h2>
               <div className="form-grid">
                 <label>
-                  条码
+                  条码 / 二维码内容
                   <input
                     ref={firstInputRef}
                     type="text"
                     autoComplete="off"
                     required
+                    placeholder="可用扫码枪直接扫入"
                     value={form.barcode}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, barcode: e.target.value }))

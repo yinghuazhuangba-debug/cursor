@@ -13,6 +13,7 @@ import type {
   Sale,
   StockLog,
 } from '../types'
+import { normalizeScanCode } from '../utils/scanCode'
 
 const STORAGE_KEY = 'xianlin-supermarket-v1'
 
@@ -336,8 +337,13 @@ export function useAppStore() {
   }, [applyDbSwitch])
 
   const findByBarcode = useCallback(
-    (barcode: string) =>
-      snapshot.products.find((p) => p.barcode === barcode.trim()),
+    (barcode: string) => {
+      const code = normalizeScanCode(barcode)
+      const raw = barcode.trim()
+      return snapshot.products.find(
+        (p) => p.barcode === code || p.barcode === raw,
+      )
+    },
     [snapshot.products],
   )
 
